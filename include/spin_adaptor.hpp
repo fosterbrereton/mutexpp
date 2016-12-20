@@ -14,16 +14,34 @@ template <typename BasicLockable>
 struct spin_adaptor
 {
     void lock() {
-        mutex_m.lock();
+        thread_local std::size_t count{0};
+        thread_local bool        spinout{false};
+
+        while (spin_m.exchange(true)) {
+            if (++count >= expected_m) {
+                spinout = true;
+
+                mutex_m.lock();
+            }
+        }
+
+        if (!spinout)
+            mutex_m.lock();
+
+        // compute new expected
+        expected_m = (count + 7 * expected_m) / 8;
     }
 
     void unlock() {
-        mutex_m.unlock();        
+        mutex_m.unlock();
+
+        spin_m = false;
     }
 
 private:
-    std::atomic<std::size_t> count_m;
-    std::atomic<std::size_t> expected_m;
+    std::atomic<bool>        spin_m{false};
+    bool                     spin_out_m{false};
+    std::atomic<std::size_t> expected_m{0};
     BasicLockable            mutex_m;
 };
 
