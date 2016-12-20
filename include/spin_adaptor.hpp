@@ -10,39 +10,42 @@
 
 /******************************************************************************/
 
-template <typename BasicLockable>
-struct spin_adaptor
+#include <chrono>
+
+/******************************************************************************/
+
+template <typename Lockable>
+class spin_adaptor
 {
+    typedef std::chrono::high_resolution_clock clock_t;
+    typedef clock_t::time_point                time_point_t;
+
+    using rep_t = decltype((std::declval<time_point_t>() - std::declval<time_point_t>()).count());
+
+    std::atomic<rep_t> expected_m{0};
+    Lockable           mutex_m;
+
+public:
     void lock() {
-        thread_local std::size_t count{0};
-        thread_local bool        spinout{false};
+        thread_local time_point_t  before = clock_t::now();
+        thread_local rep_t         elapsed{0};
 
-        while (spin_m.exchange(true)) {
-            if (++count >= expected_m) {
-                spinout = true;
+        while (!mutex_m.try_lock()) {
+            elapsed = (clock_t::now() - before).count();
 
+            if (elapsed > expected_m) {
                 mutex_m.lock();
+
+                break;
             }
         }
 
-        if (!spinout)
-            mutex_m.lock();
-
-        // compute new expected
-        expected_m = (count + 7 * expected_m) / 8;
+        expected_m = (elapsed + 7 * expected_m) / 8;
     }
 
     void unlock() {
         mutex_m.unlock();
-
-        spin_m = false;
     }
-
-private:
-    std::atomic<bool>        spin_m{false};
-    bool                     spin_out_m{false};
-    std::atomic<std::size_t> expected_m{0};
-    BasicLockable            mutex_m;
 };
 
 /******************************************************************************/
