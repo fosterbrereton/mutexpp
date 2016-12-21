@@ -30,7 +30,7 @@ public:
     using rep_t = decltype((std::declval<time_point_t>() - std::declval<time_point_t>()).count());
 
 private:
-    std::atomic<rep_t> expected_m{1};
+    std::atomic<rep_t> spin_expect_m{1};
     Lockable           mutex_m;
 
 public:
@@ -40,36 +40,36 @@ public:
 #endif
 
     void lock() {
-        thread_local time_point_t  before = clock_t::now();
-        thread_local rep_t         elapsed{0};
-
+        time_point_t  before{clock_t::now()};
+        rep_t         spin_elapsed{0};
 #if qDebug
-        bool                       did_block{false};
+        bool          did_block{false};
 #endif
 
-        const rep_t time_to_block = expected_m * 2;
-
         while (!mutex_m.try_lock()) {
-            elapsed = (clock_t::now() - before).count();
+            spin_elapsed = (clock_t::now() - before).count();
 
-            if (elapsed >= time_to_block) {
+            // we use spin_expect_m each time through the loop because it might
+            // be getting adjusted by other threads, and we want to take
+            // advantage of their work.
+            if (spin_elapsed >= spin_expect_m * 2) {
                 mutex_m.lock();
 
+#if qDebug
                 did_block = true;
-
+#endif
                 break;
             }
         }
 
-        // The larger the divisor, the less effect the current
-        // elapsed count will have on the expected value.
-        // So, assuming a perfectly stable area of contention,
-        // 4 would stabilize faster than 8.
-        expected_m += (elapsed - expected_m) / 8;
+        // The larger the divisor, the less effect the current spin_elapsed
+        // count will have on the expected value. So, assuming a perfectly
+        // stable area of contention, 4 would stabilize faster than 8.
+        spin_expect_m += (spin_elapsed - spin_expect_m) / 8;
 
 #if qDebug
         if (probe_m)
-            probe_m(did_block, expected_m);
+            probe_m(did_block, spin_expect_m);
 #endif
     }
 

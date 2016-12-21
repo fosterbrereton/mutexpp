@@ -56,6 +56,19 @@ If the time required to lock the mutex is consistently large (i.e., beyond the t
 
 Process scheduling is not considered.
 
+## Adaptive computation derivation
+
+After every mutex lock, we adjust the expected spin time. Given $p_n$ to be the predictive spin time and $m$ to be the measured spin time, 
+
+$$
+\begin{align}
+  p_{n+1} &= \frac{7}{8} p_n + \frac{1}{8} m \\
+8 p_{n+1} &= 7 p_n + m \\
+8 p_{n+1} &= 8 p_n + m - p_n \\
+  p_{n+1} &= p_n + \frac{m - p_n}{8} \\
+\end{align}
+$$
+
 # See Also
 
 - A [description](http://stackoverflow.com/a/25168942/153535) of `pthread`'s adaptive mutex from the original implementer, Kaz Kylheku
