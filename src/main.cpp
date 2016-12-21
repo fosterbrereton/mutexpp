@@ -6,6 +6,8 @@
 #include <fstream>
 #include <future>
 
+#define qDebug 1
+
 // spin_adaptor
 #include "spin_adaptor.hpp"
 
