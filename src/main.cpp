@@ -10,7 +10,7 @@
 #include "spin_adaptor.hpp"
 
 /******************************************************************************/
-
+#if 0
 struct cpu_clock_t {
     void reset() {
         start_m = std::clock();
@@ -57,7 +57,7 @@ struct thread_clock_t {
 private:
     timespec start_m;
 };
-
+#endif
 /******************************************************************************/
 
 using clk_t = std::chrono::high_resolution_clock;
