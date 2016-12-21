@@ -17,12 +17,11 @@
 template <typename Lockable>
 class spin_adaptor
 {
-    typedef std::chrono::high_resolution_clock clock_t;
-    typedef clock_t::time_point                time_point_t;
-
+    using clock_t = std::chrono::high_resolution_clock;
+    using time_point_t = clock_t::time_point;
     using rep_t = decltype((std::declval<time_point_t>() - std::declval<time_point_t>()).count());
 
-    std::atomic<rep_t> expected_m{0};
+    std::atomic<rep_t> expected_m{1};
     Lockable           mutex_m;
 
 public:
@@ -33,14 +32,14 @@ public:
         while (!mutex_m.try_lock()) {
             elapsed = (clock_t::now() - before).count();
 
-            if (elapsed > expected_m) {
+            if (elapsed > (expected_m * 2)) {
                 mutex_m.lock();
 
                 break;
             }
         }
 
-        expected_m = (elapsed + 7 * expected_m) / 8;
+        expected_m += (elapsed - expected_m) / 8;
     }
 
     void unlock() {
