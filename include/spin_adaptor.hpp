@@ -14,61 +14,77 @@
 
 /******************************************************************************/
 
-template <typename Lockable>
-class spin_adaptor
-{
+struct predictor_t {
     using clock_t = std::chrono::high_resolution_clock;
-    using time_point_t = clock_t::time_point;
+    using tp_t = clock_t::time_point;
+    using rep_t = decltype((std::declval<tp_t>() - std::declval<tp_t>()).count());
 
-public:
-    using rep_t = decltype((std::declval<time_point_t>() - std::declval<time_point_t>()).count());
+    void start() {
+        _s = clock_t::now();
+    }
+
+    bool within(double c = 2) {
+        _sp = (clock_t::now() - _s).count();
+
+        return _sp < _p * c;
+    }
+
+    void adjust() {
+        _p += (_sp - _p) / 8;
+    }
+
+    rep_t get() const { return _p; }
 
 private:
-    std::atomic<rep_t> predict_m{1};
-    Lockable           mutex_m;
+    tp_t               _s;
+    rep_t              _sp;
+    std::atomic<rep_t> _p{1};
+};
+
+/******************************************************************************/
+
+template <typename Lockable>
+class hybrid_adaptor
+{
+private:
+    predictor_t _p;
+    Lockable    _m;
 
 public:
 
 #if qDebug
-    void(*probe_m)(bool did_block, rep_t new_expected);
+    void(*_probe)(bool did_block, predictor_t::rep_t new_p);
 #endif
 
     void lock() {
-        time_point_t  before{clock_t::now()};
-        rep_t         measured{0};
 #if qDebug
-        bool          did_block{false};
+        bool did_block{false};
 #endif
 
-        while (!mutex_m.try_lock()) {
-            measured = (clock_t::now() - before).count();
+        _p.start();
 
-            // we use predict_m each time through the loop because it might
-            // be getting adjusted by other threads, and we want to take
-            // advantage of their work.
-            if (measured >= predict_m * 2) {
-                mutex_m.lock();
+        while (!_m.try_lock()) {
+            if (_p.within())
+                continue;
 
+            _m.lock();
 #if qDebug
-                did_block = true;
+            did_block = true;
 #endif
-                break;
-            }
+
+            break;
         }
 
-        // The larger the divisor, the less effect the current measured
-        // count will have on the expected value. So, assuming a perfectly
-        // stable area of contention, 4 would stabilize faster than 8.
-        predict_m += (measured - predict_m) / 8;
+        _p.adjust();
 
 #if qDebug
-        if (probe_m)
-            probe_m(did_block, predict_m);
+        if (_probe)
+            _probe(did_block, _p.get());
 #endif
     }
 
     void unlock() {
-        mutex_m.unlock();
+        _m.unlock();
     }
 };
 

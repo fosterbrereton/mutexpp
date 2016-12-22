@@ -12,63 +12,13 @@
 #include "spin_adaptor.hpp"
 
 /******************************************************************************/
-#if 0
-struct cpu_clock_t {
-    void reset() {
-        start_m = std::clock();
-    }
 
-    double split() const {
-        return 1000.0 * (std::clock() - start_m) / CLOCKS_PER_SEC;
-    }
-
-private:
-    std::clock_t start_m;
-};
-
-/******************************************************************************/
-
-struct wall_clock_t {
-    void reset() {
-        start_m = std::chrono::high_resolution_clock::now();
-    }
-
-    double split() const {
-        return std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start_m).count();
-    }
-
-private:
-    std::chrono::high_resolution_clock::time_point start_m;
-};
-
-/******************************************************************************/
-
-struct thread_clock_t {
-    void reset() {
-        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &start_m);
-    }
-
-    double split() const {
-        timespec t;
-
-        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &t);
-
-        return (t.tv_sec - start_m.tv_sec) * 1000. + ((t.tv_nsec - start_m.tv_nsec) / 1000000.);
-    }
-
-private:
-    timespec start_m;
-};
-#endif
-/******************************************************************************/
-
-using clk_t = std::chrono::high_resolution_clock;
-using spin_t = spin_adaptor<std::mutex>;
+using spin_t = hybrid_adaptor<std::mutex>;
 using spinlock_t = std::lock_guard<spin_t>;
 
 /******************************************************************************/
 
-inline void probe_log(std::ofstream& s, std::size_t& n, std::size_t& b, bool d, spin_t::rep_t e) {
+inline void probe_log(std::ofstream& s, std::size_t& n, std::size_t& b, bool d, predictor_t::rep_t e) {
     ++n;
 
     if (d)
@@ -81,12 +31,12 @@ inline void probe_log(std::ofstream& s, std::size_t& n, std::size_t& b, bool d, 
 }
 
 template <std::size_t N>
-void n_slow_probe(bool did_block, spin_t::rep_t new_expected) {
+void n_slow_probe(bool did_block, predictor_t::rep_t new_p) {
     static std::ofstream output(std::to_string(N) + "_slow.csv");
     static std::size_t n{0};
     static std::size_t b{0};
 
-    probe_log(output, n, b, did_block, new_expected);
+    probe_log(output, n, b, did_block, new_p);
 }
 
 void n_slow_worker(spin_t& mutex, std::size_t i, std::size_t max) {
@@ -111,14 +61,12 @@ int main(int argc, char** argv) {
     spin_t                         slow_4_mutex;
     spin_t                         slow_5_mutex;
 
-#if qDebug
-    slow_0_mutex.probe_m = &n_slow_probe<0>;
-    slow_1_mutex.probe_m = &n_slow_probe<1>;
-    slow_2_mutex.probe_m = &n_slow_probe<2>;
-    slow_3_mutex.probe_m = &n_slow_probe<3>;
-    slow_4_mutex.probe_m = &n_slow_probe<4>;
-    slow_5_mutex.probe_m = &n_slow_probe<5>;
-#endif
+    slow_0_mutex._probe = &n_slow_probe<0>;
+    slow_1_mutex._probe = &n_slow_probe<1>;
+    slow_2_mutex._probe = &n_slow_probe<2>;
+    slow_3_mutex._probe = &n_slow_probe<3>;
+    slow_4_mutex._probe = &n_slow_probe<4>;
+    slow_5_mutex._probe = &n_slow_probe<5>;
 
     std::cerr << "0 slow\n";
     for (std::size_t i(0); i < 5; ++i)
