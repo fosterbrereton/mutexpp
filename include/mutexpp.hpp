@@ -21,17 +21,18 @@ namespace mutexpp {
 
 using clock_t = std::chrono::high_resolution_clock;
 using tp_t = clock_t::time_point;
-using tp_diff_t = decltype((std::declval<tp_t>() - std::declval<tp_t>()).count());
+using diff_t = decltype((std::declval<tp_t>() - std::declval<tp_t>()).count());
+using duration_t = std::chrono::duration<double, std::micro>;
 #if MUTEXPP_ENABLE_PROBE
-using probe_t = void (*)(bool did_block, tp_diff_t new_p, tp_diff_t new_b);
+using probe_t = void (*)(bool did_block, duration_t new_p, duration_t new_b);
 #endif
 /******************************************************************************/
 
 class hybrid_spin_mutex_t
 {
 private:
-    std::atomic_flag       _lock{ATOMIC_FLAG_INIT};
-    std::atomic<tp_diff_t> _spin_pred{0};
+    std::atomic_flag    _lock{ATOMIC_FLAG_INIT};
+    std::atomic<diff_t> _spin_pred{0};
 
 public:
 #if MUTEXPP_ENABLE_PROBE
@@ -44,11 +45,10 @@ public:
 
     void lock() {
 #if MUTEXPP_ENABLE_PROBE
-        bool did_block{false};
+        bool   did_block{false};
 #endif
-
-        tp_t      spin_start{clock_t::now()};
-        tp_diff_t spin_meas{0};
+        tp_t   spin_start{clock_t::now()};
+        diff_t spin_meas{0};
 
         while (!try_lock()) {
             spin_meas = (clock_t::now() - spin_start).count();
@@ -63,11 +63,14 @@ public:
 #endif
         }
 
-        _spin_pred += (spin_meas -_spin_pred) / 8;
+        _spin_pred += (spin_meas - _spin_pred) / 8;
 
 #if MUTEXPP_ENABLE_PROBE
-        if (_probe)
-            _probe(did_block, _spin_pred, 0);
+        if (_probe) {
+            _probe(did_block,
+                   std::chrono::duration_cast<duration_t>(tp_t::duration(_spin_pred)),
+                   std::chrono::duration_cast<duration_t>(tp_t::duration(0)));
+        }
 #endif
     }
 
@@ -81,10 +84,10 @@ public:
 class averse_hybrid_mutex_t
 {
 private:
-    std::atomic_flag       _lock{ATOMIC_FLAG_INIT};
-    std::atomic<tp_diff_t> _spin_pred{0};
-    std::atomic<tp_diff_t> _lock_pred{0};
-    tp_t                   _lock_start;
+    std::atomic_flag    _lock{ATOMIC_FLAG_INIT};
+    std::atomic<diff_t> _spin_pred{0};
+    std::atomic<diff_t> _lock_pred{0};
+    tp_t                _lock_start;
 
 public:
 #if MUTEXPP_ENABLE_PROBE
@@ -97,10 +100,10 @@ public:
 
     void lock() {
 #if MUTEXPP_ENABLE_PROBE
-        bool      did_block{false};
+        bool   did_block{false};
 #endif
-        tp_t      spin_start{clock_t::now()};
-        tp_diff_t spin_meas{0};
+        tp_t   spin_start{clock_t::now()};
+        diff_t spin_meas{0};
 
         while (!try_lock()) {
             spin_meas = (clock_t::now() - spin_start).count();
@@ -120,14 +123,16 @@ public:
 
 #if MUTEXPP_ENABLE_PROBE
         if (_probe)
-            _probe(did_block, _spin_pred, _lock_pred);
+            _probe(did_block,
+                   std::chrono::duration_cast<duration_t>(tp_t::duration(_spin_pred)),
+                   std::chrono::duration_cast<duration_t>(tp_t::duration(_lock_pred)));
 #endif
     }
 
     void unlock() {
         _lock.clear(std::memory_order_release);
 
-        tp_diff_t lock_meas{(clock_t::now() - _lock_start).count()};
+        diff_t lock_meas{(clock_t::now() - _lock_start).count()};
 
         _lock_pred += (lock_meas - _lock_pred) / 8;
     }

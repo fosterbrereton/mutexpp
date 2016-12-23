@@ -23,8 +23,8 @@ const char* pretty_type();
 template <>
 const char* pretty_type<hybrid_spin_mutex_t>() { return "hybrid_spin_mutex_t"; }
 
-template <>
-const char* pretty_type<averse_hybrid_mutex_t>() { return "averse_hybrid_mutex_t"; }
+//template <>
+//const char* pretty_type<averse_hybrid_mutex_t>() { return "averse_hybrid_mutex_t"; }
 
 /******************************************************************************/
 
@@ -32,23 +32,23 @@ inline void probe_log(std::ofstream& out,
                       std::size_t&   n_total,
                       std::size_t&   n_blocked,
                       bool           did_block,
-                      tp_diff_t      new_p,
-                      tp_diff_t      new_b) {
+                      duration_t     new_p,
+                      duration_t     new_b) {
     ++n_total;
 
     if (did_block)
         ++n_blocked;
 
     out << static_cast<int>(did_block)
-        << ',' << new_p
-        << ',' << new_b
+        << ',' << new_p.count()
+        << ',' << new_b.count()
         << '\n';
 }
 
 template <typename Mutex, std::size_t N>
-void n_slow_probe(bool      did_block,
-                  tp_diff_t new_p,
-                  tp_diff_t new_b) {
+void n_slow_probe(bool       did_block,
+                  duration_t new_p,
+                  duration_t new_b) {
     static std::ofstream out_s(pretty_type<Mutex>() +
                              std::string("_") +
                              std::to_string(N) +
@@ -60,7 +60,7 @@ void n_slow_probe(bool      did_block,
     if (first_s) {
         first_s = false;
 
-        out_s << "blok_phas,time_spin,time_blok\n";
+        out_s << "blok_phas,spin (us),block (us)\n";
     }
 
     probe_log(out_s, n_total_s, n_blocked_s, did_block, new_p, new_b);
@@ -104,5 +104,5 @@ void text_mutex_type() {
 
 int main(int argc, char** argv) {
     text_mutex_type<hybrid_spin_mutex_t>();
-    text_mutex_type<averse_hybrid_mutex_t>();
+    //text_mutex_type<averse_hybrid_mutex_t>();
 }
