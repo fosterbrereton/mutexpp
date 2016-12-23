@@ -6,7 +6,7 @@
 #include <fstream>
 #include <future>
 
-#define qDebug 1
+#define MUTEXPP_ENABLE_PROBE 1
 
 // mutexpp
 #include "mutexpp.hpp"

@@ -22,7 +22,7 @@ namespace mutexpp {
 using clock_t = std::chrono::high_resolution_clock;
 using tp_t = clock_t::time_point;
 using tp_diff_t = decltype((std::declval<tp_t>() - std::declval<tp_t>()).count());
-#if qDebug
+#if MUTEXPP_ENABLE_PROBE
 using probe_t = void (*)(bool did_block, tp_diff_t new_p, tp_diff_t new_b);
 #endif
 /******************************************************************************/
@@ -34,7 +34,7 @@ private:
     std::atomic_flag       _lock{ATOMIC_FLAG_INIT};
 
 public:
-#if qDebug
+#if MUTEXPP_ENABLE_PROBE
     probe_t _probe;
 #endif
 
@@ -43,7 +43,7 @@ public:
     }
 
     void lock() {
-#if qDebug
+#if MUTEXPP_ENABLE_PROBE
         bool did_block{false};
 #endif
 
@@ -57,14 +57,14 @@ public:
                 continue;
 
             std::this_thread::sleep_for(std::chrono::nanoseconds(0));
-#if qDebug
+#if MUTEXPP_ENABLE_PROBE
             did_block = true;
 #endif
         }
 
         _spin_pred += (spin_meas -_spin_pred) / 8;
 
-#if qDebug
+#if MUTEXPP_ENABLE_PROBE
         if (_probe)
             _probe(did_block, _spin_pred, 0);
 #endif
@@ -87,7 +87,7 @@ private:
     bool                   _did_block;
 
 public:
-#if qDebug
+#if MUTEXPP_ENABLE_PROBE
     probe_t _probe;
 #endif
 
@@ -115,7 +115,7 @@ public:
         _lock_start = clock_t::now();
         _spin_pred += (spin_meas -_spin_pred) / 8;
 
-#if qDebug
+#if MUTEXPP_ENABLE_PROBE
         if (_probe)
             _probe(did_block, _spin_pred, _block_pred);
 #endif
