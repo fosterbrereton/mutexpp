@@ -60,7 +60,7 @@ void n_slow_probe(bool      did_block,
                              "_slow.csv");
     static std::size_t   n_total_s{0};
     static std::size_t   n_blocked_s{0};
-    static bool          first_s{false};
+    static bool          first_s{true};
 
     if (first_s) {
         first_s = false;
