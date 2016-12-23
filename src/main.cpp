@@ -1,10 +1,10 @@
 // stdc++
+#include <fstream>
+#include <future>
 #include <iostream>
 #include <mutex>
 #include <thread>
 #include <vector>
-#include <fstream>
-#include <future>
 
 #define MUTEXPP_ENABLE_PROBE 1
 
@@ -74,8 +74,7 @@ void n_slow_worker(Mutex& mutex, std::size_t i, std::size_t max) {
         std::lock_guard<Mutex> lock(mutex);
 
         if (is_slow) {
-            static const timespec slow_k{0, 3 * 1000000};
-            nanosleep(&slow_k, nullptr);
+            std::this_thread::sleep_for(std::chrono::milliseconds(3));
         }
     }
 }

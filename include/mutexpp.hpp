@@ -10,8 +10,8 @@
 
 /******************************************************************************/
 
-#include <chrono>
 #include <atomic>
+#include <chrono>
 
 /******************************************************************************/
 
@@ -30,8 +30,8 @@ using probe_t = void (*)(bool did_block, tp_diff_t new_p, tp_diff_t new_b);
 class hybrid_spin_mutex_t
 {
 private:
-    std::atomic<tp_diff_t> _spin_pred{0};
     std::atomic_flag       _lock{ATOMIC_FLAG_INIT};
+    std::atomic<tp_diff_t> _spin_pred{0};
 
 public:
 #if MUTEXPP_ENABLE_PROBE
@@ -57,6 +57,7 @@ public:
                 continue;
 
             std::this_thread::sleep_for(std::chrono::nanoseconds(0));
+
 #if MUTEXPP_ENABLE_PROBE
             did_block = true;
 #endif
@@ -80,11 +81,10 @@ public:
 class averse_hybrid_mutex_t
 {
 private:
-    std::atomic<tp_diff_t> _spin_pred{0};
-    std::atomic<tp_diff_t> _block_pred{0};
     std::atomic_flag       _lock{ATOMIC_FLAG_INIT};
+    std::atomic<tp_diff_t> _spin_pred{0};
+    std::atomic<tp_diff_t> _lock_pred{0};
     tp_t                   _lock_start;
-    bool                   _did_block;
 
 public:
 #if MUTEXPP_ENABLE_PROBE
@@ -96,28 +96,31 @@ public:
     }
 
     void lock() {
+#if MUTEXPP_ENABLE_PROBE
         bool      did_block{false};
+#endif
         tp_t      spin_start{clock_t::now()};
         tp_diff_t spin_meas{0};
 
         while (!try_lock()) {
             spin_meas = (clock_t::now() - spin_start).count();
 
-            if (spin_meas < _spin_pred * 2)
+            if (_spin_pred < _lock_pred && spin_meas < _spin_pred * 2)
                 continue;
 
             std::this_thread::sleep_for(std::chrono::nanoseconds(0));
 
+#if MUTEXPP_ENABLE_PROBE
             did_block = true;
+#endif
         }
 
-        _did_block = did_block;
         _lock_start = clock_t::now();
         _spin_pred += (spin_meas -_spin_pred) / 8;
 
 #if MUTEXPP_ENABLE_PROBE
         if (_probe)
-            _probe(did_block, _spin_pred, _block_pred);
+            _probe(did_block, _spin_pred, _lock_pred);
 #endif
     }
 
@@ -126,7 +129,7 @@ public:
 
         tp_diff_t lock_meas{(clock_t::now() - _lock_start).count()};
 
-        _block_pred += (lock_meas - _block_pred) / 8;
+        _lock_pred += (lock_meas - _lock_pred) / 8;
     }
 };
 
