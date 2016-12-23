@@ -1,4 +1,4 @@
-`spin_adaptor.hpp` is a C++11 header that turns [`Lockable`](http://en.cppreference.com/w/cpp/concept/Lockable)-compatible mutexes into hybrid spin mutexes.
+`mutexpp` is a collection of C++ mutex implementations and utilities.
 
 # Overview
 

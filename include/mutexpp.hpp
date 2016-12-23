@@ -5,16 +5,17 @@
 // https://opensource.org/licenses/MIT)
 /******************************************************************************/
 
-#ifndef MUTEX_ADAPTORS_HPP__
-#define MUTEX_ADAPTORS_HPP__
+#ifndef MUTEXPP_HPP__
+#define MUTEXPP_HPP__
 
 /******************************************************************************/
 
 #include <chrono>
+#include <atomic>
 
 /******************************************************************************/
 
-namespace muads {
+namespace mutexpp {
 
 /******************************************************************************/
 
@@ -26,38 +27,39 @@ using probe_t = void (*)(bool did_block, tp_diff_t new_p, tp_diff_t new_b);
 #endif
 /******************************************************************************/
 
-template <typename Lockable>
-class hybrid_adaptor
+class hybrid_spin_mutex_t
 {
 private:
     std::atomic<tp_diff_t> _spin_pred{0};
-    Lockable               _mutex;
+    std::atomic_flag       _lock{ATOMIC_FLAG_INIT};
 
 public:
 #if qDebug
     probe_t _probe;
 #endif
 
+    bool try_lock() {
+        return !_lock.test_and_set(std::memory_order_acquire);
+    }
+
     void lock() {
 #if qDebug
-        bool      did_block{false};
+        bool did_block{false};
 #endif
 
-        tp_t      spin_start = clock_t::now();
+        tp_t      spin_start{clock_t::now()};
         tp_diff_t spin_meas{0};
 
-        while (!_mutex.try_lock()) {
+        while (!try_lock()) {
             spin_meas = (clock_t::now() - spin_start).count();
 
             if (spin_meas < _spin_pred * 2)
                 continue;
 
-            _mutex.lock();
+            std::this_thread::sleep_for(std::chrono::nanoseconds(0));
 #if qDebug
             did_block = true;
 #endif
-
-            break;
         }
 
         _spin_pred += (spin_meas -_spin_pred) / 8;
@@ -69,61 +71,49 @@ public:
     }
 
     void unlock() {
-        _mutex.unlock();
+        _lock.clear(std::memory_order_release);
     }
 };
 
 /******************************************************************************/
 
-template <typename Lockable>
-class avert_hybrid_adaptor
+class averse_hybrid_mutex_t
 {
 private:
     std::atomic<tp_diff_t> _spin_pred{0};
     std::atomic<tp_diff_t> _block_pred{0};
-    Lockable               _m;
+    std::atomic_flag       _lock{ATOMIC_FLAG_INIT};
+    tp_t                   _lock_start;
+    bool                   _did_block;
 
 public:
 #if qDebug
     probe_t _probe;
 #endif
 
-    void lock() {
-#if qDebug
-        bool did_block{false};
-#endif
-        tp_t      spin_start = clock_t::now();
-        tp_diff_t spin_meas{0};
-
-        if (_spin_pred > _block_pred) {
-                tp_t block_start = clock_t::now();
-                _m.lock();
-                tp_diff_t block_meas = (clock_t::now() - block_start).count();
-                _block_pred += (block_meas -_block_pred) / 8;
-#if qDebug
-                did_block = true;
-#endif
-        } else {
-            while (!_m.try_lock()) {
-                spin_meas = (clock_t::now() - spin_start).count();
-
-                if (spin_meas < _spin_pred * 2)
-                    continue;
-
-                tp_t block_start = clock_t::now();
-                _m.lock();
-                tp_diff_t block_meas = (clock_t::now() - block_start).count();
-                _block_pred += (block_meas -_block_pred) / 8;
-#if qDebug
-                did_block = true;
-#endif
-
-                break;
-            }
-
-            _spin_pred += (spin_meas -_spin_pred) / 8;
+    bool try_lock() {
+        return !_lock.test_and_set(std::memory_order_acquire);
     }
 
+    void lock() {
+        bool      did_block{false};
+        tp_t      spin_start{clock_t::now()};
+        tp_diff_t spin_meas{0};
+
+        while (!try_lock()) {
+            spin_meas = (clock_t::now() - spin_start).count();
+
+            if (spin_meas < _spin_pred * 2)
+                continue;
+
+            std::this_thread::sleep_for(std::chrono::nanoseconds(0));
+
+            did_block = true;
+        }
+
+        _did_block = did_block;
+        _lock_start = clock_t::now();
+        _spin_pred += (spin_meas -_spin_pred) / 8;
 
 #if qDebug
         if (_probe)
@@ -132,16 +122,20 @@ public:
     }
 
     void unlock() {
-        _m.unlock();
+        _lock.clear(std::memory_order_release);
+
+        tp_diff_t lock_meas{(clock_t::now() - _lock_start).count()};
+
+        _block_pred += (lock_meas - _block_pred) / 8;
     }
 };
 
 /******************************************************************************/
 
-} // namespace muads
+} // namespace mutexpp
 
 /******************************************************************************/
 
-#endif // MUTEX_ADAPTORS_HPP__
+#endif // MUTEXPP_HPP__
 
 /******************************************************************************/

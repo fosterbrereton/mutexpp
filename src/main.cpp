@@ -8,17 +8,12 @@
 
 #define qDebug 1
 
-// mutex_adaptors
-#include "mutex_adaptors.hpp"
+// mutexpp
+#include "mutexpp.hpp"
 
 /******************************************************************************/
 
-using namespace muads;
-
-/******************************************************************************/
-
-using hytex_t = hybrid_adaptor<std::mutex>;
-using avtex_t = avert_hybrid_adaptor<std::mutex>;
+using namespace mutexpp;
 
 /******************************************************************************/
 
@@ -26,10 +21,10 @@ template <typename T>
 const char* pretty_type();
 
 template <>
-const char* pretty_type<hytex_t>() { return "hytex_t"; }
+const char* pretty_type<hybrid_spin_mutex_t>() { return "hybrid_spin_mutex_t"; }
 
 template <>
-const char* pretty_type<avtex_t>() { return "avtex_t"; }
+const char* pretty_type<averse_hybrid_mutex_t>() { return "averse_hybrid_mutex_t"; }
 
 /******************************************************************************/
 
@@ -109,6 +104,6 @@ void text_mutex_type() {
 }
 
 int main(int argc, char** argv) {
-    text_mutex_type<hytex_t>();
-    text_mutex_type<avtex_t>();
+    text_mutex_type<hybrid_spin_mutex_t>();
+    text_mutex_type<averse_hybrid_mutex_t>();
 }

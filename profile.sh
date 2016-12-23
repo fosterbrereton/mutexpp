@@ -4,11 +4,11 @@ TOP=`dirname $0`
 
 pushd $TOP/build
 
-xcodebuild -configuration Release -target spin_adaptor
+xcodebuild -configuration Release -target mutexpp
 
 pushd ./Release
 
-./spin_adaptor
+./mutexpp
 
 popd
 
