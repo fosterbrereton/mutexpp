@@ -8,42 +8,75 @@
 
 #define qDebug 1
 
-// spin_adaptor
-#include "spin_adaptor.hpp"
+// mutex_adaptors
+#include "mutex_adaptors.hpp"
 
 /******************************************************************************/
 
-using spin_t = hybrid_adaptor<std::mutex>;
-using spinlock_t = std::lock_guard<spin_t>;
+using namespace muads;
 
 /******************************************************************************/
 
-inline void probe_log(std::ofstream& s, std::size_t& n, std::size_t& b, bool d, predictor_t::rep_t e) {
-    ++n;
+using hytex_t = hybrid_adaptor<std::mutex>;
+using avtex_t = avert_hybrid_adaptor<std::mutex>;
 
-    if (d)
-        ++b;
+/******************************************************************************/
 
-    s << e
-      << ',' << static_cast<int>(d)
-      << ',' << static_cast<double>(b) / n
-      << '\n';
+template <typename T>
+const char* pretty_type();
+
+template <>
+const char* pretty_type<hytex_t>() { return "hytex_t"; }
+
+template <>
+const char* pretty_type<avtex_t>() { return "avtex_t"; }
+
+/******************************************************************************/
+
+inline void probe_log(std::ofstream& out,
+                      std::size_t&   n_total,
+                      std::size_t&   n_blocked,
+                      bool           did_block,
+                      tp_diff_t      new_p,
+                      tp_diff_t      new_b) {
+    ++n_total;
+
+    if (did_block)
+        ++n_blocked;
+
+    out << static_cast<int>(did_block)
+        << ',' << new_p
+        << ',' << new_b
+        << '\n';
 }
 
-template <std::size_t N>
-void n_slow_probe(bool did_block, predictor_t::rep_t new_p) {
-    static std::ofstream output(std::to_string(N) + "_slow.csv");
-    static std::size_t n{0};
-    static std::size_t b{0};
+template <typename Mutex, std::size_t N>
+void n_slow_probe(bool      did_block,
+                  tp_diff_t new_p,
+                  tp_diff_t new_b) {
+    static std::ofstream out_s(pretty_type<Mutex>() +
+                             std::string("_") +
+                             std::to_string(N) +
+                             "_slow.csv");
+    static std::size_t   n_total_s{0};
+    static std::size_t   n_blocked_s{0};
+    static bool          first_s{false};
 
-    probe_log(output, n, b, did_block, new_p);
+    if (first_s) {
+        first_s = false;
+
+        out_s << "blok_phas,time_spin,time_blok\n";
+    }
+
+    probe_log(out_s, n_total_s, n_blocked_s, did_block, new_p, new_b);
 }
 
-void n_slow_worker(spin_t& mutex, std::size_t i, std::size_t max) {
+template <typename Mutex>
+void n_slow_worker(Mutex& mutex, std::size_t i, std::size_t max) {
     bool is_slow{i < max};
 
     for (std::size_t i(0); i < 100; ++i) {
-        spinlock_t lock(mutex);
+        std::lock_guard<Mutex> lock(mutex);
 
         if (is_slow) {
             static const timespec slow_k{0, 3 * 1000000};
@@ -52,49 +85,30 @@ void n_slow_worker(spin_t& mutex, std::size_t i, std::size_t max) {
     }
 }
 
-int main(int argc, char** argv) {
+template <typename Mutex, std::size_t N>
+void test_mutex_n_slow() {
     std::vector<std::future<void>> futures;
-    spin_t                         slow_0_mutex;
-    spin_t                         slow_1_mutex;
-    spin_t                         slow_2_mutex;
-    spin_t                         slow_3_mutex;
-    spin_t                         slow_4_mutex;
-    spin_t                         slow_5_mutex;
+    Mutex                          mutex;
 
-    slow_0_mutex._probe = &n_slow_probe<0>;
-    slow_1_mutex._probe = &n_slow_probe<1>;
-    slow_2_mutex._probe = &n_slow_probe<2>;
-    slow_3_mutex._probe = &n_slow_probe<3>;
-    slow_4_mutex._probe = &n_slow_probe<4>;
-    slow_5_mutex._probe = &n_slow_probe<5>;
-
-    std::cerr << "0 slow\n";
+    mutex._probe = &n_slow_probe<Mutex, N>;
+ 
+    std::cerr << pretty_type<Mutex>() << " " << N << " slow\n";
+ 
     for (std::size_t i(0); i < 5; ++i)
-        futures.emplace_back(std::async(n_slow_worker, std::ref(slow_0_mutex), i, 0));
-    futures.clear();
+        futures.emplace_back(std::async(n_slow_worker<Mutex>, std::ref(mutex), i, N));
+}
 
-    std::cerr << "1 slow\n";
-    for (std::size_t i(0); i < 5; ++i)
-        futures.emplace_back(std::async(n_slow_worker, std::ref(slow_1_mutex), i, 1));
-    futures.clear();
+template <typename Mutex>
+void text_mutex_type() {
+    test_mutex_n_slow<Mutex, 0>();
+    test_mutex_n_slow<Mutex, 1>();
+    test_mutex_n_slow<Mutex, 2>();
+    test_mutex_n_slow<Mutex, 3>();
+    test_mutex_n_slow<Mutex, 4>();
+    test_mutex_n_slow<Mutex, 5>();
+}
 
-    std::cerr << "2 slow\n";
-    for (std::size_t i(0); i < 5; ++i)
-        futures.emplace_back(std::async(n_slow_worker, std::ref(slow_2_mutex), i, 2));
-    futures.clear();
-
-    std::cerr << "3 slow\n";
-    for (std::size_t i(0); i < 5; ++i)
-        futures.emplace_back(std::async(n_slow_worker, std::ref(slow_3_mutex), i, 3));
-    futures.clear();
-
-    std::cerr << "4 slow\n";
-    for (std::size_t i(0); i < 5; ++i)
-        futures.emplace_back(std::async(n_slow_worker, std::ref(slow_4_mutex), i, 4));
-    futures.clear();
-
-    std::cerr << "5 slow\n";
-    for (std::size_t i(0); i < 5; ++i)
-        futures.emplace_back(std::async(n_slow_worker, std::ref(slow_5_mutex), i, 5));
-    futures.clear();
+int main(int argc, char** argv) {
+    text_mutex_type<hytex_t>();
+    text_mutex_type<avtex_t>();
 }
