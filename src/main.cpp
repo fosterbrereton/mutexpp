@@ -150,13 +150,14 @@ template <typename Mutex>
 void mutex_compare_map_insert_specific() {
     std::vector<double> times;
 
-    for (std::size_t i(0); i < 100; ++i) {
+    for (std::size_t i(0); i < 1000; ++i) {
         Mutex                               mutex;
         std::vector<std::future<void>>      futures;
         std::map<std::string, std::string>  map;
         tp_t                                start = mutexpp::clock_t::now();
 
-        for (std::size_t i(0); i < 5; ++i) {
+        // TODO : test over/under/exactly subscribed...
+        for (std::size_t i(0); i < std::thread::hardware_concurrency(); ++i) {
             futures.emplace_back(std::async([&mutex, &map]() {
                 for (std::size_t i(0); i < 1000; ++i) {
                     std::string key = std::to_string(std::rand());

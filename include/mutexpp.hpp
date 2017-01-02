@@ -108,7 +108,7 @@ public:
         while (!try_lock()) {
             spin_meas = (clock_t::now() - spin_start).count();
 
-            if (_spin_pred < _lock_pred && spin_meas < _spin_pred * 2)
+            if (_spin_pred < _lock_pred * 1.5 && spin_meas < _spin_pred * 2)
                 continue;
 
             std::this_thread::sleep_for(std::chrono::nanoseconds(0));

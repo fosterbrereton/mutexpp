@@ -7,6 +7,7 @@
 
 // stdc++
 #include <iostream>
+#include <cmath>
 
 // application
 #include "analysis.hpp"
@@ -17,7 +18,10 @@ std::ostream& operator<<(std::ostream& s, const normal_analysis_t& a) {
     return s << "n: " << a.count_m
              << ", min: " << a.min_m
              << ", max: " << a.max_m
-             << ", avg: " << a.avg_m;
+             << ", avg: " << a.avg_m
+             << ", stdev: " << a.stddev_m
+             << ", 3sig: [" << a.avg_m - 3 * a.stddev_m << ", " << a.avg_m + 3 * a.stddev_m << ']'
+             ;
 }
 
 /******************************************************************************/
@@ -41,6 +45,15 @@ normal_analysis_t normal_analysis(const std::vector<double>& normal_data) {
     }
 
     result.avg_m /= result.count_m;
+
+    for (const auto& datum : normal_data) {
+        double diff = datum - result.avg_m;
+        result.stddev_m += diff * diff;
+    }
+
+    result.stddev_m /= result.count_m;
+
+    result.stddev_m = std::sqrt(result.stddev_m);
 
     return result;
 }
