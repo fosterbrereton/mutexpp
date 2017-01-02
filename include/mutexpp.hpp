@@ -36,7 +36,7 @@ private:
 
 public:
 #if MUTEXPP_ENABLE_PROBE
-    probe_t _probe;
+    probe_t _probe{nullptr};
 #endif
 
     bool try_lock() {
@@ -118,7 +118,6 @@ public:
 #endif
         }
 
-        _lock_start = clock_t::now();
         _spin_pred += (spin_meas -_spin_pred) / 8;
 
 #if MUTEXPP_ENABLE_PROBE
@@ -127,14 +126,16 @@ public:
                    std::chrono::duration_cast<duration_t>(tp_t::duration(_spin_pred)),
                    std::chrono::duration_cast<duration_t>(tp_t::duration(_lock_pred)));
 #endif
+
+        _lock_start = clock_t::now();
     }
 
     void unlock() {
-        _lock.clear(std::memory_order_release);
-
         diff_t lock_meas{(clock_t::now() - _lock_start).count()};
 
         _lock_pred += (lock_meas - _lock_pred) / 8;
+
+        _lock.clear(std::memory_order_release);
     }
 };
 
