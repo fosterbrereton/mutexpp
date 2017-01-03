@@ -7,7 +7,6 @@
 
 // stdc++
 #include <fstream>
-#include <future>
 #include <iostream>
 #include <mutex>
 #include <thread>
@@ -28,11 +27,20 @@ using namespace mutexpp;
 
 /******************************************************************************/
 
+static const std::size_t thread_exact_k = std::thread::hardware_concurrency();
+static const std::size_t thread_under_k = thread_exact_k / 2;
+static const std::size_t thread_over_k = thread_exact_k * 2;
+
+/******************************************************************************/
+
 template <typename T>
 std::string pretty_type();
 
 template <>
 std::string pretty_type<std::mutex>() { return "stdmutex"; }
+
+template <>
+std::string pretty_type<spin_mutex_t>() { return "spin_mutex_t"; }
 
 template <>
 std::string pretty_type<hybrid_spin_mutex_t>() { return "hybrid_spin_mutex_t"; }
@@ -63,6 +71,8 @@ inline void probe_log(std::ofstream& out,
         << '\n';
 }
 
+/******************************************************************************/
+
 template <typename Mutex, std::size_t N>
 void n_slow_probe(bool       did_block,
                   duration_t new_p,
@@ -82,6 +92,8 @@ void n_slow_probe(bool       did_block,
 
     probe_log(out_s, n_total_s, n_blocked_s, did_block, new_p, new_b);
 }
+
+/******************************************************************************/
 
 template <typename Mutex>
 void n_slow_worker(Mutex& mutex, std::size_t i, std::size_t max) {
@@ -123,21 +135,28 @@ void n_slow_worker(Mutex& mutex, std::size_t i, std::size_t max) {
 #endif
 }
 
+/******************************************************************************/
+
 template <typename Mutex, std::size_t N>
 void test_mutex_n_slow() {
-    std::vector<std::future<void>> futures;
-    Mutex                          mutex;
+    std::vector<std::thread> pool;
+    Mutex                    mutex;
 
     mutex._probe = &n_slow_probe<Mutex, N>;
  
     std::cerr << pretty_type<Mutex>() << " " << N << " slow\n";
  
     for (std::size_t i(0); i < 5; ++i)
-        futures.emplace_back(std::async(n_slow_worker<Mutex>, std::ref(mutex), i, N));
+        pool.emplace_back(n_slow_worker<Mutex>, std::ref(mutex), i, N);
+
+    for (auto& t : pool)
+        t.join();
 }
 
+/******************************************************************************/
+
 template <typename Mutex>
-void text_mutex_type() {
+void mutex_benchmark_specific() {
     test_mutex_n_slow<Mutex, 0>();
     test_mutex_n_slow<Mutex, 1>();
     test_mutex_n_slow<Mutex, 2>();
@@ -146,62 +165,140 @@ void text_mutex_type() {
     test_mutex_n_slow<Mutex, 5>();
 }
 
+/******************************************************************************/
+
 template <typename Mutex>
-void mutex_compare_map_insert_specific() {
-    std::vector<double> times;
+struct map_insert_test {
+    using mutex_type = Mutex;
 
-    for (std::size_t i(0); i < 1000; ++i) {
-        Mutex                               mutex;
-        std::vector<std::future<void>>      futures;
-        std::map<std::string, std::string>  map;
-        tp_t                                start = mutexpp::clock_t::now();
+    void run_once(mutex_type& mutex) {
+        std::string key = std::to_string(std::rand());
+        std::string value = std::to_string(std::rand());
 
-        // TODO : test over/under/exactly subscribed...
-        for (std::size_t i(0); i < std::thread::hardware_concurrency(); ++i) {
-            futures.emplace_back(std::async([&mutex, &map]() {
-                for (std::size_t i(0); i < 1000; ++i) {
-                    std::string key = std::to_string(std::rand());
-                    std::string value = std::to_string(std::rand());
-
-                    std::lock_guard<Mutex> lock(mutex);
-                    map[key] = value;
-                }
-            }));
-        }
-
-        futures.clear();
-
-        tp_t end = mutexpp::clock_t::now();
-
-        times.push_back(std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(end - start).count());
+        std::lock_guard<mutex_type> lock(mutex);
+        map_m[key] = value;
     }
 
-    normal_analysis_t results = normal_analysis(times);
+    std::map<std::string, std::string> map_m;
+};
+
+/******************************************************************************/
+
+template <typename Mutex>
+struct map_search_test {
+    using mutex_type = Mutex;
+
+    map_search_test() {
+        for (std::size_t i(0); i < 100000; ++i) {
+            std::string key = std::to_string(std::rand());
+            std::string value = std::to_string(std::rand());
+
+            map_m[key] = value;
+        }
+    }
+
+    void run_once(mutex_type& mutex) {
+        std::string key = std::to_string(std::rand());
+
+        std::lock_guard<Mutex> lock(mutex);
+        (void)map_m.find(key);
+    }
+
+    std::map<std::string, std::string> map_m;
+};
+
+/******************************************************************************/
+
+template <typename Test>
+void run_test_instance(std::size_t thread_count) {
+    using mutex_type = typename Test::mutex_type;
+
+    std::vector<double> wall_times;
+    std::vector<double> cpu_times;
+    Test                test;
+
+    for (std::size_t i(0); i < 100; ++i) {
+        mutex_type               mutex;
+        std::vector<std::thread> pool;
+        tp_t                     wall_start = mutexpp::clock_t::now();
+        std::clock_t             cpu_start = std::clock();
+
+        for (std::size_t i(0); i < thread_count; ++i) {
+            pool.emplace_back([&mutex, &test]() {
+                for (std::size_t i(0); i < 1000; ++i) {
+                    test.run_once(mutex);
+                }
+            });
+        }
+
+        for (auto& thread : pool)
+            thread.join();
+
+        tp_t         wall_end = mutexpp::clock_t::now();
+        std::clock_t cpu_end = std::clock();
+
+        wall_times.push_back(std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(wall_end - wall_start).count());
+        // REVISIT (fbrereto) : CLOCKS_PER_SEC is microsecond precision under
+        // macOS. I doubt it is the same everywhere.
+        cpu_times.push_back(1000. * (cpu_end - cpu_start) / CLOCKS_PER_SEC);
+    }
 
     std::cerr << "  "
-              << pretty_type<Mutex>()
+              << pretty_type<mutex_type>() << "/wal"
               << ": "
-              << results
+              << normal_analysis(wall_times)
+              << '\n';
+
+    std::cerr << "  "
+              << pretty_type<mutex_type>() << "/cpu"
+              << ": "
+              << normal_analysis(cpu_times)
               << '\n';
 }
 
-void mutex_compare_map_insert() {
-    std::cerr << "mutex_compare_map_insert:\n";
+/******************************************************************************/
 
-    mutex_compare_map_insert_specific<std::mutex>();
-    mutex_compare_map_insert_specific<hybrid_spin_mutex_t>();
-    mutex_compare_map_insert_specific<averse_hybrid_mutex_t>();
+template <template <typename> class Test>
+void run_test_aggregate(const char* name, std::size_t thread_count) {
+    std::cerr << name << ' ' << thread_count << '/' << thread_exact_k << '\n';
+
+    run_test_instance<Test<std::mutex>>(thread_count);
+    run_test_instance<Test<spin_mutex_t>>(thread_count);
+    run_test_instance<Test<hybrid_spin_mutex_t>>(thread_count);
+    run_test_instance<Test<averse_hybrid_mutex_t>>(thread_count);
 }
+
+/******************************************************************************/
+
+template <template <typename> class Test>
+void run_test_aggregate(const char* name) {
+    run_test_aggregate<Test>(name, thread_under_k);
+    run_test_aggregate<Test>(name, thread_exact_k);
+    run_test_aggregate<Test>(name, thread_over_k);
+}
+
+/******************************************************************************/
 
 void mutex_compare() {
-    mutex_compare_map_insert();
+    run_test_aggregate<map_insert_test>("map_insert_test");
+    run_test_aggregate<map_search_test>("map_search_test");
 }
+
+/******************************************************************************/
+
+void mutex_benchmark() {
+    mutex_benchmark_specific<spin_mutex_t>();
+    mutex_benchmark_specific<hybrid_spin_mutex_t>();
+    mutex_benchmark_specific<averse_hybrid_mutex_t>();
+}
+
+/******************************************************************************/
 
 int main(int argc, char** argv) {
     std::srand(std::time(nullptr));
 
-    //text_mutex_type<hybrid_spin_mutex_t>();
-    //text_mutex_type<averse_hybrid_mutex_t>();
-
+    // mutex_benchmark();
     mutex_compare();
 }
+
+/******************************************************************************/

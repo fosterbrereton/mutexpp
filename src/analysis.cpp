@@ -15,12 +15,16 @@
 /******************************************************************************/
 
 std::ostream& operator<<(std::ostream& s, const normal_analysis_t& a) {
-    return s << "n: " << a.count_m
-             << ", min: " << a.min_m
-             << ", max: " << a.max_m
-             << ", avg: " << a.avg_m
-             << ", stdev: " << a.stddev_m
-             << ", 3sig: [" << a.avg_m - 3 * a.stddev_m << ", " << a.avg_m + 3 * a.stddev_m << ']'
+    auto sig3 = 3 * a.stddev_m;
+    auto sig3low = a.avg_m - sig3;
+    auto sig3high = a.avg_m + sig3;
+
+    return s //<< "n: " << a.count_m << ", "
+             << "min: " << a.min_m << ", "
+             << "max: " << a.max_m << ", "
+             << "avg: " << a.avg_m << ", "
+             << "stdev: " << a.stddev_m << ", "
+             << "3sig: [" << sig3low << ", " << sig3high << ']'
              ;
 }
 
