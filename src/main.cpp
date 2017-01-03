@@ -37,16 +37,16 @@ template <typename T>
 std::string pretty_type();
 
 template <>
-std::string pretty_type<std::mutex>() { return "stdmutex"; }
+std::string pretty_type<std::mutex>() { return "std"; }
 
 template <>
-std::string pretty_type<spin_mutex_t>() { return "spin_mutex_t"; }
+std::string pretty_type<spin_mutex_t>() { return "spin"; }
 
 template <>
-std::string pretty_type<hybrid_spin_mutex_t>() { return "hybrid_spin_mutex_t"; }
+std::string pretty_type<adaptive_spin_mutex_t>() { return "adaptive_spin"; }
 
 template <>
-std::string pretty_type<averse_hybrid_mutex_t>() { return "averse_hybrid_mutex_t"; }
+std::string pretty_type<adaptive_block_mutex_t>() { return "adaptive_block"; }
 
 /******************************************************************************/
 
@@ -142,8 +142,10 @@ void test_mutex_n_slow() {
     std::vector<std::thread> pool;
     Mutex                    mutex;
 
+#if MUTEXPP_ENABLE_PROBE
     mutex._probe = &n_slow_probe<Mutex, N>;
- 
+#endif
+
     std::cerr << pretty_type<Mutex>() << " " << N << " slow\n";
  
     for (std::size_t i(0); i < 5; ++i)
@@ -171,7 +173,7 @@ template <typename Mutex>
 struct map_insert_test {
     using mutex_type = Mutex;
 
-    void run_once(mutex_type& mutex) {
+    void run_once(mutex_type& mutex, std::size_t, std::size_t) {
         std::string key = std::to_string(std::rand());
         std::string value = std::to_string(std::rand());
 
@@ -197,11 +199,34 @@ struct map_search_test {
         }
     }
 
-    void run_once(mutex_type& mutex) {
+    void run_once(mutex_type& mutex, std::size_t, std::size_t) {
         std::string key = std::to_string(std::rand());
 
         std::lock_guard<Mutex> lock(mutex);
         (void)map_m.find(key);
+    }
+
+    std::map<std::string, std::string> map_m;
+};
+
+/******************************************************************************/
+
+template <typename Mutex>
+struct map_hybrid_test {
+    using mutex_type = Mutex;
+
+    void run_once(mutex_type& mutex, std::size_t thread_n, std::size_t thread_i) {
+        std::string key = std::to_string(std::rand());
+
+        if (thread_i == 0) {
+            std::string value = std::to_string(std::rand());
+
+            std::lock_guard<Mutex> lock(mutex);
+            map_m[key] = value;
+        } else {
+            std::lock_guard<Mutex> lock(mutex);
+            (void)map_m.find(key);
+        }
     }
 
     std::map<std::string, std::string> map_m;
@@ -217,16 +242,16 @@ void run_test_instance(std::size_t thread_count) {
     std::vector<double> cpu_times;
     Test                test;
 
-    for (std::size_t i(0); i < 100; ++i) {
+    for (std::size_t test_i(0); test_i < 100; ++test_i) {
         mutex_type               mutex;
         std::vector<std::thread> pool;
         tp_t                     wall_start = mutexpp::clock_t::now();
         std::clock_t             cpu_start = std::clock();
 
-        for (std::size_t i(0); i < thread_count; ++i) {
-            pool.emplace_back([&mutex, &test]() {
-                for (std::size_t i(0); i < 1000; ++i) {
-                    test.run_once(mutex);
+        for (std::size_t thread_i(0); thread_i < thread_count; ++thread_i) {
+            pool.emplace_back([&mutex, &test, thread_count, thread_i]() {
+                for (std::size_t inner_i(0); inner_i < 1000; ++inner_i) {
+                    test.run_once(mutex, thread_count, thread_i);
                 }
             });
         }
@@ -264,8 +289,8 @@ void run_test_aggregate(const char* name, std::size_t thread_count) {
 
     run_test_instance<Test<std::mutex>>(thread_count);
     run_test_instance<Test<spin_mutex_t>>(thread_count);
-    run_test_instance<Test<hybrid_spin_mutex_t>>(thread_count);
-    run_test_instance<Test<averse_hybrid_mutex_t>>(thread_count);
+    run_test_instance<Test<adaptive_spin_mutex_t>>(thread_count);
+    run_test_instance<Test<adaptive_block_mutex_t>>(thread_count);
 }
 
 /******************************************************************************/
@@ -282,22 +307,25 @@ void run_test_aggregate(const char* name) {
 void mutex_compare() {
     run_test_aggregate<map_insert_test>("map_insert_test");
     run_test_aggregate<map_search_test>("map_search_test");
+    run_test_aggregate<map_hybrid_test>("map_hybrid_test");
 }
 
 /******************************************************************************/
-
+#if MUTEXPP_ENABLE_PROBE
 void mutex_benchmark() {
     mutex_benchmark_specific<spin_mutex_t>();
-    mutex_benchmark_specific<hybrid_spin_mutex_t>();
-    mutex_benchmark_specific<averse_hybrid_mutex_t>();
+    mutex_benchmark_specific<adaptive_spin_mutex_t>();
+    mutex_benchmark_specific<adaptive_block_mutex_t>();
 }
-
+#endif
 /******************************************************************************/
 
 int main(int argc, char** argv) {
     std::srand(std::time(nullptr));
 
-    // mutex_benchmark();
+#if MUTEXPP_ENABLE_PROBE
+    mutex_benchmark();
+#endif
     mutex_compare();
 }
 
