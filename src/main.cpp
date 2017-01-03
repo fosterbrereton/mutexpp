@@ -13,7 +13,7 @@
 #include <vector>
 #include <map>
 
-#define MUTEXPP_ENABLE_PROBE 1
+#define MUTEXPP_ENABLE_PROBE 0
 
 // mutexpp
 #include "mutexpp.hpp"
@@ -173,7 +173,9 @@ template <typename Mutex>
 struct map_insert_test {
     using mutex_type = Mutex;
 
-    void run_once(mutex_type& mutex, std::size_t, std::size_t) {
+    explicit map_insert_test(std::size_t) { }
+
+    void run_once(mutex_type& mutex, std::size_t) {
         std::string key = std::to_string(std::rand());
         std::string value = std::to_string(std::rand());
 
@@ -190,6 +192,8 @@ template <typename Mutex>
 struct map_search_test {
     using mutex_type = Mutex;
 
+    explicit map_search_test(std::size_t) { }
+
     map_search_test() {
         for (std::size_t i(0); i < 100000; ++i) {
             std::string key = std::to_string(std::rand());
@@ -199,7 +203,7 @@ struct map_search_test {
         }
     }
 
-    void run_once(mutex_type& mutex, std::size_t, std::size_t) {
+    void run_once(mutex_type& mutex, std::size_t) {
         std::string key = std::to_string(std::rand());
 
         std::lock_guard<Mutex> lock(mutex);
@@ -211,24 +215,30 @@ struct map_search_test {
 
 /******************************************************************************/
 
-template <typename Mutex>
+template <std::size_t SlowThreshold, typename Mutex>
 struct map_hybrid_test {
     using mutex_type = Mutex;
 
-    void run_once(mutex_type& mutex, std::size_t thread_n, std::size_t thread_i) {
-        std::string key = std::to_string(std::rand());
+    explicit map_hybrid_test(std::size_t thread_count) :
+        thread_count_m(thread_count)
+    { }
 
-        if (thread_i == 0) {
+    void run_once(mutex_type& mutex, std::size_t thread_i) {
+        const std::size_t write_group = thread_count_m * (SlowThreshold / 100.);
+        std::string       key = std::to_string(std::rand());
+
+        if (thread_i <= write_group) {
             std::string value = std::to_string(std::rand());
 
             std::lock_guard<Mutex> lock(mutex);
             map_m[key] = value;
-        } else {
+        } else { // read group
             std::lock_guard<Mutex> lock(mutex);
             (void)map_m.find(key);
         }
     }
 
+    std::size_t                        thread_count_m;
     std::map<std::string, std::string> map_m;
 };
 
@@ -240,7 +250,7 @@ void run_test_instance(std::size_t thread_count) {
 
     std::vector<double> wall_times;
     std::vector<double> cpu_times;
-    Test                test;
+    Test                test(thread_count);
 
     for (std::size_t test_i(0); test_i < 100; ++test_i) {
         mutex_type               mutex;
@@ -249,9 +259,9 @@ void run_test_instance(std::size_t thread_count) {
         std::clock_t             cpu_start = std::clock();
 
         for (std::size_t thread_i(0); thread_i < thread_count; ++thread_i) {
-            pool.emplace_back([&mutex, &test, thread_count, thread_i]() {
+            pool.emplace_back([&mutex, &test, thread_i]() {
                 for (std::size_t inner_i(0); inner_i < 1000; ++inner_i) {
-                    test.run_once(mutex, thread_count, thread_i);
+                    test.run_once(mutex, thread_i);
                 }
             });
         }
@@ -304,10 +314,19 @@ void run_test_aggregate(const char* name) {
 
 /******************************************************************************/
 
+template <class Mutex>
+using hybrid_25 = map_hybrid_test<25, Mutex>;
+template <class Mutex>
+using hybrid_50 = map_hybrid_test<50, Mutex>;
+template <class Mutex>
+using hybrid_75 = map_hybrid_test<75, Mutex>;
+
 void mutex_compare() {
     run_test_aggregate<map_insert_test>("map_insert_test");
     run_test_aggregate<map_search_test>("map_search_test");
-    run_test_aggregate<map_hybrid_test>("map_hybrid_test");
+    run_test_aggregate<hybrid_25>("map_hybrid_25_test");
+    run_test_aggregate<hybrid_50>("map_hybrid_50_test");
+    run_test_aggregate<hybrid_75>("map_hybrid_75_test");
 }
 
 /******************************************************************************/
