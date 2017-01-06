@@ -71,7 +71,10 @@ $$
 
 # See Also
 
+## Mutex related
+
 - A [description](http://stackoverflow.com/a/25168942/153535) of `pthread`'s adaptive mutex from the original implementer, Kaz Kylheku
+- Intel TBB description of [mutex flavors](https://www.threadingbuildingblocks.org/docs/help/tbb_userguide/Mutex_Flavors.html).
 
 ## Clock & Timing related
 
