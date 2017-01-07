@@ -43,14 +43,14 @@ template <>
 std::string pretty_type<spin_mutex_t>() { return "spin"; }
 
 template <>
-std::string pretty_type<adaptive_spin_mutex_t>() { return "adaptive_spin"; }
+std::string pretty_type<adaptive_spin_mutex_t>() { return "adaptive spin"; }
 
 template <>
-std::string pretty_type<adaptive_block_mutex_t>() { return "adaptive_block"; }
+std::string pretty_type<adaptive_block_mutex_t>() { return "adaptive block"; }
 
 /******************************************************************************/
 
-typedef std::pair<tp_t, tp_t> time_pair_t;
+#if MUTEXPP_ENABLE_PROBE
 
 /******************************************************************************/
 
@@ -99,40 +99,15 @@ template <typename Mutex>
 void n_slow_worker(Mutex& mutex, std::size_t i, std::size_t max) {
     constexpr std::size_t count_k = 100;
 
-    bool                     is_slow{i < max};
-    // std::vector<time_pair_t> time_pairs(count_k, time_pair_t());
+    bool is_slow{i < max};
 
     for (std::size_t i(0); i < count_k; ++i) {
-        // time_pairs[i].first = mutexpp::clock_t::now();
         std::lock_guard<Mutex> lock(mutex);
-        // time_pairs[i].second = mutexpp::clock_t::now();
 
         if (is_slow) {
             std::this_thread::sleep_for(std::chrono::milliseconds(3));
         }
     }
-
-#if 0
-    std::vector<double> times;
-
-    for (const auto& pair : time_pairs) {
-        times.push_back(std::chrono::duration_cast<mutexpp::duration_t>(pair.second - pair.first).count());
-    }
-
-    std::sort(times.begin(), times.end());
-
-    std::ofstream ttl_out(pretty_type<Mutex>() + "_" +
-                          std::string("worker_") +
-                          std::to_string(max) + "_" +
-                          std::to_string(i) +
-                          "_ttl.csv");
-
-    ttl_out << "dur (us)\n";
-
-    for (const auto& time : times) {
-        ttl_out << time << "\n";
-    }
-#endif
 }
 
 /******************************************************************************/
@@ -142,9 +117,7 @@ void test_mutex_n_slow() {
     std::vector<std::thread> pool;
     Mutex                    mutex;
 
-#if MUTEXPP_ENABLE_PROBE
     mutex._probe = &n_slow_probe<Mutex, N>;
-#endif
 
     std::cerr << pretty_type<Mutex>() << " " << N << " slow\n";
  
@@ -166,6 +139,18 @@ void mutex_benchmark_specific() {
     test_mutex_n_slow<Mutex, 4>();
     test_mutex_n_slow<Mutex, 5>();
 }
+
+/******************************************************************************/
+
+void mutex_benchmark() {
+    mutex_benchmark_specific<spin_mutex_t>();
+    mutex_benchmark_specific<adaptive_spin_mutex_t>();
+    mutex_benchmark_specific<adaptive_block_mutex_t>();
+}
+
+/******************************************************************************/
+
+#endif // MUTEXPP_ENABLE_PROBE
 
 /******************************************************************************/
 
@@ -220,14 +205,13 @@ struct map_hybrid_test {
     using mutex_type = Mutex;
 
     explicit map_hybrid_test(std::size_t thread_count) :
-        thread_count_m(thread_count)
+        write_group_m(std::max(thread_count * (SlowThreshold / 100.), 0.))
     { }
 
     void run_once(mutex_type& mutex, std::size_t thread_i) {
-        const std::size_t write_group = thread_count_m * (SlowThreshold / 100.);
-        std::string       key = std::to_string(std::rand());
+        std::string key = std::to_string(std::rand());
 
-        if (thread_i <= write_group) {
+        if (thread_i <= write_group_m) {
             std::string value = std::to_string(std::rand());
 
             std::lock_guard<Mutex> lock(mutex);
@@ -238,7 +222,7 @@ struct map_hybrid_test {
         }
     }
 
-    std::size_t                        thread_count_m;
+    const std::size_t                  write_group_m;
     std::map<std::string, std::string> map_m;
 };
 
@@ -279,13 +263,13 @@ void run_test_instance(std::size_t thread_count) {
     }
 
     std::cerr << "  "
-              << pretty_type<mutex_type>() << "/wal"
+              << pretty_type<mutex_type>() << " wall"
               << ": "
               << normal_analysis(wall_times)
               << '\n';
 
     std::cerr << "  "
-              << pretty_type<mutex_type>() << "/cpu"
+              << pretty_type<mutex_type>() << " cpu"
               << ": "
               << normal_analysis(cpu_times)
               << '\n';
@@ -329,14 +313,6 @@ void mutex_compare() {
     run_test_aggregate<hybrid_75>("map_hybrid_75_test");
 }
 
-/******************************************************************************/
-#if MUTEXPP_ENABLE_PROBE
-void mutex_benchmark() {
-    mutex_benchmark_specific<spin_mutex_t>();
-    mutex_benchmark_specific<adaptive_spin_mutex_t>();
-    mutex_benchmark_specific<adaptive_block_mutex_t>();
-}
-#endif
 /******************************************************************************/
 
 int main(int argc, char** argv) {

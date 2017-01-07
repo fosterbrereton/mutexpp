@@ -22,9 +22,12 @@ namespace mutexpp {
 using clock_t = std::chrono::high_resolution_clock;
 using tp_t = clock_t::time_point;
 using diff_t = decltype((std::declval<tp_t>() - std::declval<tp_t>()).count());
-using duration_t = std::chrono::duration<double, std::micro>;
+
 #if MUTEXPP_ENABLE_PROBE
-using probe_t = void (*)(bool did_block, duration_t new_p, duration_t new_b);
+using duration_t = std::chrono::duration<double, std::micro>;
+using probe_t = void (*)(bool        did_block,
+                         std::size_t spin_count,
+                         duration_t  block_count);
 #endif
 
 /******************************************************************************/
@@ -43,17 +46,15 @@ public:
     }
 
     void lock() {
-#if MUTEXPP_ENABLE_PROBE
-        tp_t start = clock_t::now();
-#endif
+        std::size_t spin_count{0};
 
-        while (!try_lock()) { }
+        while (!try_lock()) { ++spin_count; }
 
 #if MUTEXPP_ENABLE_PROBE
         if (_probe) {
-            _probe(false,
-                   std::chrono::duration_cast<duration_t>(clock_t::now() - start),
-                   std::chrono::duration_cast<duration_t>(tp_t::duration(0)));
+            static const duration_t zero_k{std::chrono::duration_cast<duration_t>(tp_t::duration(0))};
+
+            _probe(false, spin_count, zero_k);
         }
 #endif
     }
@@ -67,8 +68,8 @@ public:
 
 class adaptive_spin_mutex_t {
 private:
-    std::atomic_flag    _lock{ATOMIC_FLAG_INIT};
-    std::atomic<diff_t> _spin_pred{0};
+    std::atomic_flag         _lock{ATOMIC_FLAG_INIT};
+    std::atomic<std::size_t> _spin_pred{0};
 
 public:
 #if MUTEXPP_ENABLE_PROBE
@@ -83,13 +84,12 @@ public:
 #if MUTEXPP_ENABLE_PROBE
         bool   did_block{false};
 #endif
-        tp_t   spin_start{clock_t::now()};
-        diff_t spin_meas{0};
+        std::size_t spin_count{0};
 
         while (!try_lock()) {
-            spin_meas = (clock_t::now() - spin_start).count();
+            ++spin_count;
 
-            if (spin_meas < _spin_pred * 2)
+            if (spin_count < _spin_pred * 2)
                 continue;
 
             // REVISIT (fbrereto) : Iff sleep_for is guaranteed to block even when the
@@ -101,13 +101,12 @@ public:
 #endif
         }
 
-        _spin_pred += (spin_meas - _spin_pred) / 8;
+        _spin_pred += (spin_count - _spin_pred) / 8;
 
 #if MUTEXPP_ENABLE_PROBE
         if (_probe) {
-            _probe(did_block,
-                   std::chrono::duration_cast<duration_t>(tp_t::duration(_spin_pred)),
-                   std::chrono::duration_cast<duration_t>(tp_t::duration(0)));
+            static const duration_t zero_k{std::chrono::duration_cast<duration_t>(tp_t::duration(0))};
+            _probe(did_block, _spin_pred, zero_k);
         }
 #endif
     }
@@ -127,7 +126,7 @@ private:
 
 public:
 #if MUTEXPP_ENABLE_PROBE
-    probe_t _probe;
+    probe_t _probe{nullptr};
 #endif
 
     bool try_lock() {
@@ -136,7 +135,7 @@ public:
 
     void lock() {
 #if MUTEXPP_ENABLE_PROBE
-        bool   did_block{false};
+        bool did_block{false};
 #endif
 
         while (!try_lock()) {
@@ -150,7 +149,7 @@ public:
 #if MUTEXPP_ENABLE_PROBE
         if (_probe)
             _probe(did_block,
-                   std::chrono::duration_cast<duration_t>(tp_t::duration(0)),
+                   0,
                    std::chrono::duration_cast<duration_t>(tp_t::duration(_lock_pred)));
 #endif
 
