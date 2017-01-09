@@ -1,0 +1,5 @@
+[requires]
+tbb/4.4.20160526@dwerner/testing
+
+[generators]
+cmake

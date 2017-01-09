@@ -13,6 +13,10 @@
 #include <vector>
 #include <map>
 
+// tbb
+#include <tbb/mutex.h>
+#include <tbb/spin_mutex.h>
+
 #define MUTEXPP_ENABLE_PROBE 0
 
 // mutexpp
@@ -37,7 +41,10 @@ template <typename T>
 std::string pretty_type();
 
 template <>
-std::string pretty_type<std::mutex>() { return "std"; }
+std::string pretty_type<tbb::mutex>() { return "tbb/mutex"; }
+
+template <>
+std::string pretty_type<tbb::spin_mutex>() { return "tbb/spin"; }
 
 template <>
 std::string pretty_type<spin_mutex_t>() { return "spin"; }
@@ -144,6 +151,7 @@ void mutex_benchmark_specific() {
 
 void mutex_benchmark() {
     mutex_benchmark_specific<spin_mutex_t>();
+    mutex_benchmark_specific<tbb::spin_mutex>();
     mutex_benchmark_specific<adaptive_spin_mutex_t>();
     mutex_benchmark_specific<adaptive_block_mutex_t>();
 }
@@ -281,7 +289,8 @@ template <template <typename> class Test>
 void run_test_aggregate(const char* name, std::size_t thread_count) {
     std::cerr << name << ' ' << thread_count << '/' << thread_exact_k << '\n';
 
-    run_test_instance<Test<std::mutex>>(thread_count);
+    run_test_instance<Test<tbb::mutex>>(thread_count);
+    run_test_instance<Test<tbb::spin_mutex>>(thread_count);
     run_test_instance<Test<spin_mutex_t>>(thread_count);
     run_test_instance<Test<adaptive_spin_mutex_t>>(thread_count);
     run_test_instance<Test<adaptive_block_mutex_t>>(thread_count);
