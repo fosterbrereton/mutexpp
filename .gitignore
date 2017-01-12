@@ -2,3 +2,4 @@
 build/
 conanbuildinfo.cmake
 conaninfo.txt
+conan_imports_manifest.txt

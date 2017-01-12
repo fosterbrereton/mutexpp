@@ -6,7 +6,7 @@ pushd $TOP/build
 
 xcodebuild -configuration Release -target mutexpp
 
-pushd ./Release
+pushd ./bin
 
 ./mutexpp
 

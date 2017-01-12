@@ -34,7 +34,7 @@ using probe_t = void (*)(bool        did_block,
 
 class spin_mutex_t {
 private:
-    std::atomic_flag _lock{ATOMIC_FLAG_INIT};
+    std::atomic_flag _lock = ATOMIC_FLAG_INIT;
 
 public:
 #if MUTEXPP_ENABLE_PROBE
@@ -68,7 +68,7 @@ public:
 
 class adaptive_spin_mutex_t {
 private:
-    std::atomic_flag         _lock{ATOMIC_FLAG_INIT};
+    std::atomic_flag         _lock = ATOMIC_FLAG_INIT;
     std::atomic<std::size_t> _spin_pred{0};
 
 public:
@@ -121,7 +121,7 @@ public:
 
 class adaptive_block_mutex_t {
 private:
-    std::atomic_flag    _lock{ATOMIC_FLAG_INIT};
+    std::atomic_flag    _lock = ATOMIC_FLAG_INIT;
     std::atomic<diff_t> _lock_pred{0};
     tp_t                _lock_start;
 
