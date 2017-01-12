@@ -14,17 +14,33 @@
 
 /******************************************************************************/
 
+void normal_analysis_header(std::ostream& s) {
+    // make sure this routine accurately reflects the fields being output.
+    s //<< "n,"
+      << "sig3 high,"
+      << "sig3 low,"
+      << "avg,"
+      << "min,"
+      << "max,"
+      << "stddev"
+      << '\n'
+      ;
+}
+
+/******************************************************************************/
+
 std::ostream& operator<<(std::ostream& s, const normal_analysis_t& a) {
     auto sig3 = 3 * a.stddev_m;
     auto sig3low = a.avg_m - sig3;
     auto sig3high = a.avg_m + sig3;
 
-    return s //<< "n: " << a.count_m << ", "
-             << "min: " << a.min_m << ", "
-             << "max: " << a.max_m << ", "
-             << "avg: " << a.avg_m << ", "
-             << "stdev: " << a.stddev_m << ", "
-             << "3sig: [" << sig3low << ", " << sig3high << ']'
+    return s //<< a.count_m << ','
+             << sig3high << ','
+             << sig3low << ','
+             << a.avg_m << ','
+             << a.min_m << ','
+             << a.max_m << ','
+             << a.stddev_m
              ;
 }
 

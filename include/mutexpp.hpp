@@ -92,8 +92,9 @@ public:
             if (spin_count < _spin_pred * 2)
                 continue;
 
-            // REVISIT (fbrereto) : Iff sleep_for is guaranteed to block even when the
-            // duration is 0, then std::chrono::nanoseconds(0) will suffice here.
+            // REVISIT (fbrereto) : Iff sleep_for is guaranteed to block even
+            // when the duration is 0, then std::chrono::nanoseconds(0) will
+            // suffice here.
             std::this_thread::sleep_for(std::chrono::microseconds(1));
 
 #if MUTEXPP_ENABLE_PROBE

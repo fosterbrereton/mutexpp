@@ -27,6 +27,8 @@ std::ostream& operator<<(std::ostream& s, const normal_analysis_t&);
 // assumes data is distributed normally
 normal_analysis_t normal_analysis(const std::vector<double>& normal_data);
 
+void normal_analysis_header(std::ostream& s);
+
 /******************************************************************************/
 
 #endif // ANALYSIS_HPP__

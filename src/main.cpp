@@ -237,7 +237,7 @@ struct map_hybrid_test {
 /******************************************************************************/
 
 template <typename Test>
-void run_test_instance(std::size_t thread_count) {
+void run_test_instance(std::size_t thread_count, std::ostream& out) {
     using mutex_type = typename Test::mutex_type;
 
     std::vector<double> wall_times;
@@ -247,16 +247,22 @@ void run_test_instance(std::size_t thread_count) {
     for (std::size_t test_i(0); test_i < 100; ++test_i) {
         mutex_type               mutex;
         std::vector<std::thread> pool;
-        tp_t                     wall_start = mutexpp::clock_t::now();
-        std::clock_t             cpu_start = std::clock();
+        std::atomic<bool>        go{false};
 
         for (std::size_t thread_i(0); thread_i < thread_count; ++thread_i) {
-            pool.emplace_back([&mutex, &test, thread_i]() {
+            pool.emplace_back([&mutex, &test, &go, thread_i]() {
+                while (!go); // spin here until we go.
+
                 for (std::size_t inner_i(0); inner_i < 1000; ++inner_i) {
                     test.run_once(mutex, thread_i);
                 }
             });
         }
+
+        tp_t         wall_start = mutexpp::clock_t::now();
+        std::clock_t cpu_start = std::clock();
+
+        go = true;
 
         for (auto& thread : pool)
             thread.join();
@@ -270,39 +276,42 @@ void run_test_instance(std::size_t thread_count) {
         cpu_times.push_back(1000. * (cpu_end - cpu_start) / CLOCKS_PER_SEC);
     }
 
-    std::cerr << "  "
-              << pretty_type<mutex_type>() << " wall"
-              << ": "
-              << normal_analysis(wall_times)
-              << '\n';
+    out << pretty_type<mutex_type>() << " wall"
+        << ","
+        << normal_analysis(wall_times)
+        << '\n';
 
-    std::cerr << "  "
-              << pretty_type<mutex_type>() << " cpu"
-              << ": "
-              << normal_analysis(cpu_times)
-              << '\n';
+    out << pretty_type<mutex_type>() << " cpu"
+        << ","
+        << normal_analysis(cpu_times)
+        << '\n';
 }
 
 /******************************************************************************/
 
 template <template <typename> class Test>
-void run_test_aggregate(const char* name, std::size_t thread_count) {
-    std::cerr << name << ' ' << thread_count << '/' << thread_exact_k << '\n';
+void run_test_aggregate(const char* name, std::size_t thread_count, std::ostream& out) {
+    out << name << ' ' << thread_count << '/' << thread_exact_k << '\n';
 
-    run_test_instance<Test<tbb::mutex>>(thread_count);
-    run_test_instance<Test<tbb::spin_mutex>>(thread_count);
-    run_test_instance<Test<spin_mutex_t>>(thread_count);
-    run_test_instance<Test<adaptive_spin_mutex_t>>(thread_count);
-    run_test_instance<Test<adaptive_block_mutex_t>>(thread_count);
+    run_test_instance<Test<tbb::mutex>>(thread_count, out);
+    run_test_instance<Test<tbb::spin_mutex>>(thread_count, out);
+    run_test_instance<Test<spin_mutex_t>>(thread_count, out);
+    run_test_instance<Test<adaptive_spin_mutex_t>>(thread_count, out);
+    run_test_instance<Test<adaptive_block_mutex_t>>(thread_count, out);
 }
 
 /******************************************************************************/
 
 template <template <typename> class Test>
-void run_test_aggregate(const char* name) {
-    run_test_aggregate<Test>(name, thread_under_k);
-    run_test_aggregate<Test>(name, thread_exact_k);
-    run_test_aggregate<Test>(name, thread_over_k);
+void run_test_aggregate(const char* name, std::ostream& out) {
+    out << "name,";
+    normal_analysis_header(out);
+
+    run_test_aggregate<Test>(name, thread_under_k, out);
+    run_test_aggregate<Test>(name, thread_exact_k, out);
+    run_test_aggregate<Test>(name, thread_over_k, out);
+
+    out.flush();
 }
 
 /******************************************************************************/
@@ -315,11 +324,46 @@ template <class Mutex>
 using hybrid_75 = map_hybrid_test<75, Mutex>;
 
 void mutex_compare() {
-    run_test_aggregate<map_insert_test>("map_insert_test");
-    run_test_aggregate<map_search_test>("map_search_test");
-    run_test_aggregate<hybrid_25>("map_hybrid_25_test");
-    run_test_aggregate<hybrid_50>("map_hybrid_50_test");
-    run_test_aggregate<hybrid_75>("map_hybrid_75_test");
+    run_test_aggregate<map_insert_test>("map_insert_test", std::cerr);
+    run_test_aggregate<map_search_test>("map_search_test", std::cerr);
+    run_test_aggregate<hybrid_25>("map_hybrid_25_test", std::cerr);
+    run_test_aggregate<hybrid_50>("map_hybrid_50_test", std::cerr);
+    run_test_aggregate<hybrid_75>("map_hybrid_75_test", std::cerr);
+}
+
+/******************************************************************************/
+
+template <typename Test>
+void run_test_comprehensive_instance(std::ostream& out) {
+    static std::size_t max_threads_k = std::thread::hardware_concurrency() * 2;
+
+    out << "name,";
+    normal_analysis_header(out);
+
+    for (std::size_t i(1); i <= max_threads_k; ++i) {
+        run_test_instance<Test>(i, out);
+        out.flush();
+    }
+}
+
+/******************************************************************************/
+
+template <template <typename> class Test>
+void run_test_comprehensive(const char* name, std::ostream& out) {
+    out << name << '\n';
+
+    run_test_comprehensive_instance<Test<tbb::mutex>>(out);
+    run_test_comprehensive_instance<Test<spin_mutex_t>>(out);
+    run_test_comprehensive_instance<Test<adaptive_spin_mutex_t>>(out);
+    run_test_comprehensive_instance<Test<adaptive_block_mutex_t>>(out);
+}
+
+/******************************************************************************/
+
+void mutex_comprehensive() {
+    std::ofstream out("comprehensive.txt");
+
+    run_test_comprehensive<map_insert_test>("map_insert_test", out);
 }
 
 /******************************************************************************/
@@ -330,7 +374,9 @@ int main(int argc, char** argv) {
 #if MUTEXPP_ENABLE_PROBE
     mutex_benchmark();
 #endif
-    mutex_compare();
+    //mutex_compare();
+
+    mutex_comprehensive();
 }
 
 /******************************************************************************/
