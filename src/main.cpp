@@ -21,6 +21,7 @@
 
 // mutexpp
 #include "mutexpp.hpp"
+#include "serial_queue.hpp"
 
 // application
 #include "analysis.hpp"
@@ -368,6 +369,16 @@ void mutex_comprehensive() {
 
 /******************************************************************************/
 
+void serial_queue_test() {
+    mutexpp::serial_queue_t q;
+
+    std::cout << q.sync([](){
+        return std::string("Hello, world!");
+    }) << '\n';
+}
+
+/******************************************************************************/
+
 int main(int argc, char** argv) {
     std::srand(std::time(nullptr));
 
@@ -376,7 +387,8 @@ int main(int argc, char** argv) {
 #endif
     //mutex_compare();
 
-    mutex_comprehensive();
+    //mutex_comprehensive();
+    serial_queue_test();
 }
 
 /******************************************************************************/
