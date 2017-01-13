@@ -6,10 +6,12 @@
 /******************************************************************************/
 
 // stdc++
+#include <ctime>
 #include <fstream>
 #include <iostream>
 #include <mutex>
 #include <thread>
+#include <string>
 #include <vector>
 #include <map>
 
@@ -214,7 +216,7 @@ struct map_hybrid_test {
     using mutex_type = Mutex;
 
     explicit map_hybrid_test(std::size_t thread_count) :
-        write_group_m(std::max(thread_count * (SlowThreshold / 100.), 0.))
+        write_group_m(static_cast<std::size_t>((std::max)(thread_count * (SlowThreshold / 100.), 0.)))
     { }
 
     void run_once(mutex_type& mutex, std::size_t thread_i) {
@@ -274,7 +276,10 @@ void run_test_instance(std::size_t thread_count, std::ostream& out) {
         wall_times.push_back(std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(wall_end - wall_start).count());
         // REVISIT (fbrereto) : CLOCKS_PER_SEC is microsecond precision under
         // macOS. I doubt it is the same everywhere.
-        cpu_times.push_back(1000. * (cpu_end - cpu_start) / CLOCKS_PER_SEC);
+		{
+		using std::clock_t;
+		cpu_times.push_back(1000. * (cpu_end - cpu_start) / CLOCKS_PER_SEC);
+		}
     }
 
     out << pretty_type<mutex_type>() << " wall"
@@ -372,15 +377,17 @@ void mutex_comprehensive() {
 void serial_queue_test() {
     mutexpp::serial_queue_t q;
 
-    std::cout << q.sync([](){
-        return std::string("Hello, world!");
-    }) << '\n';
+	auto foo = q.sync([]() {
+		return std::string("Hello, world!");
+	});
+
+    std::cout << foo << '\n';
 }
 
 /******************************************************************************/
 
 int main(int argc, char** argv) {
-    std::srand(std::time(nullptr));
+    std::srand(static_cast<unsigned int>(std::time(nullptr)));
 
 #if MUTEXPP_ENABLE_PROBE
     mutex_benchmark();

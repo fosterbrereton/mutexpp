@@ -16,8 +16,8 @@
 
 struct normal_analysis_t {
     std::size_t count_m{0};
-    double      min_m{std::numeric_limits<double>::max()};
-    double      max_m{std::numeric_limits<double>::min()};
+    double      min_m{(std::numeric_limits<double>::max)()};
+    double      max_m{(std::numeric_limits<double>::min)()};
     double      avg_m{0};
     double      stddev_m{0};
 };
