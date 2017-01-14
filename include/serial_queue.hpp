@@ -51,10 +51,26 @@ class serial_queue_t {
 
 public:
     serial_queue_t() = default;
-    serial_queue_t(const char* name) : _q{ dispatch_queue_create(name, NULL) } { }
+
+    serial_queue_t(const serial_queue_t& rhs) : _q(rhs._q) {
+        dispatch_retain(_q);
+    }
+
+    serial_queue_t(const char* name) : _q{ dispatch_queue_create(name, NULL) } {
+    }
 
     ~serial_queue_t() {
         dispatch_release(_q);
+    }
+
+    serial_queue_t& operator=(const serial_queue_t& rhs) {
+        if (_q != rhs._q) {
+            dispatch_release(_q);
+            _q = rhs._q;
+            dispatch_retain(_q);
+        }
+
+        return *this;
     }
 
     template <class Function, class... Args>
@@ -185,14 +201,14 @@ class serial_queue_t {
     DWORD _q{0};
 
 public:
-	serial_queue_t() = default;
+    serial_queue_t() = default;
 
-	serial_queue_t(const serial_queue_t& rhs) :
-		_q(rhs._q) {
-		MFLockWorkQueue(_q);
-	}
+    serial_queue_t(const serial_queue_t& rhs) :
+        _q(rhs._q) {
+        MFLockWorkQueue(_q);
+    }
 
-	serial_queue_t(const char* name) {
+    serial_queue_t(const char* name) {
         HRESULT hr = MFAllocateSerialWorkQueue(MFASYNC_CALLBACK_QUEUE_MULTITHREADED, &_q);
 
         if (hr != S_OK)
@@ -203,15 +219,15 @@ public:
         MFUnlockWorkQueue(_q);
     }
 
-	serial_queue_t& operator=(const serial_queue_t& rhs) {
-		if (_q != rhs._q) {
-			MFUnlockWorkQueue(_q);
-			_q = rhs._q;
-			MFLockWorkQueue(_q);
-		}
+    serial_queue_t& operator=(const serial_queue_t& rhs) {
+        if (_q != rhs._q) {
+            MFUnlockWorkQueue(_q);
+            _q = rhs._q;
+            MFLockWorkQueue(_q);
+        }
 
-		return *this;
-	}
+        return *this;
+    }
 
     template <class Function, class... Args>
     std::future<detail::result_type<Function, Args...>> async(Function&& f, Args&&... args) {
