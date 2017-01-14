@@ -1,8 +1,6 @@
 project (mutexpp)
 cmake_minimum_required (VERSION 2.6)
 
-set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-
 include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
 conan_basic_setup()
 set(CMAKE_SKIP_RPATH OFF)

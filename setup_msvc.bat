@@ -6,11 +6,19 @@ if exist "%VC_ROOT%bin\VCVARS32.BAT" (
     call "%VC_ROOT%bin\VCVARS32.BAT"
 )
 
-conan install . --build=missing -s build_type=Debug -s compiler="Visual Studio" -s compiler.runtime="MDd"
+MKDIR build_debug
+PUSHD build_debug
 
-MKDIR build
+conan install .. --build=missing -s build_type=Debug -s compiler="Visual Studio" -s compiler.runtime="MDd"
 
-PUSHD build
+cmake -G "Visual Studio 14 Win64" ..
+
+POPD
+
+MKDIR build_release
+PUSHD build_release
+
+conan install .. --build=missing -s build_type=Release -s compiler="Visual Studio" -s compiler.runtime="MDd"
 
 cmake -G "Visual Studio 14 Win64" ..
 
