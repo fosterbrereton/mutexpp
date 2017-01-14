@@ -119,7 +119,7 @@ using result_type = decltype(std::declval<Function>()(std::declval<Args>()...));
 struct mf_init_t {
     mf_init_t() {
         if (MFStartup(MF_VERSION, MFSTARTUP_LITE) != S_OK)
-            throw std::runtime_error();
+            throw std::runtime_error("MFStartup failed");
 
         _ok = true;
     }
@@ -211,7 +211,7 @@ public:
         auto result = p->get_future();
 
         if (MFPutWorkItem(_q, p, nullptr) != S_OK)
-            throw std::runtime_error();
+            throw std::runtime_error("MFPutWorkItem failed");
 
         return result;
     }
