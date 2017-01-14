@@ -117,55 +117,55 @@ using result_type = decltype(std::declval<Function>()(std::declval<Args>()...));
 /******************************************************************************/
 
 struct mf_init_t {
-	mf_init_t() {
-		if (MFStartup(MF_VERSION, MFSTARTUP_LITE) != S_OK)
-			throw std::runtime_error();
+    mf_init_t() {
+        if (MFStartup(MF_VERSION, MFSTARTUP_LITE) != S_OK)
+            throw std::runtime_error();
 
-		_ok = true;
-	}
-	~mf_init_t() {
-		if (_ok)
-			MFShutdown();
+        _ok = true;
     }
-	bool _ok{false};
+    ~mf_init_t() {
+        if (_ok)
+            MFShutdown();
+    }
+    bool _ok{false};
 };
 
 /******************************************************************************/
 
 template <typename ResultType, typename PackagedType>
 struct async_wrapper : public IMFAsyncCallback {
-	PackagedType _p;
-	LONG         _rc{1};
+    PackagedType _p;
+    LONG         _rc{1};
 
     template <typename F>
-	explicit async_wrapper(F&& f) : _p(std::forward<F>(f)) { }
+    explicit async_wrapper(F&& f) : _p(std::forward<F>(f)) { }
 
     std::future<ResultType> get_future() { return _p.get_future(); }
 
-	STDMETHODIMP QueryInterface(REFIID riid, void** ppv) {
-		#pragma warning (push)
-		#pragma warning (disable:4838) // DWORD to int narrowing conversion
-		static const QITAB qit[] = {
-			QITABENT(async_wrapper, IMFAsyncCallback),
-			{ 0 }
-		};
-		#pragma warning (pop)
-		return QISearch(this, qit, riid, ppv);
-	}
+    STDMETHODIMP QueryInterface(REFIID riid, void** ppv) {
+        #pragma warning (push)
+        #pragma warning (disable:4838) // DWORD to int narrowing conversion
+        static const QITAB qit[] = {
+            QITABENT(async_wrapper, IMFAsyncCallback),
+            { 0 }
+        };
+        #pragma warning (pop)
+        return QISearch(this, qit, riid, ppv);
+    }
 
-	STDMETHODIMP_(ULONG) AddRef() {
-		return InterlockedIncrement(&_rc);
-	}
+    STDMETHODIMP_(ULONG) AddRef() {
+        return InterlockedIncrement(&_rc);
+    }
 
-	STDMETHODIMP_(ULONG) Release() {
-		LONG cRef = InterlockedDecrement(&_rc);
-		if (cRef == 0) {
-			delete this;
-		}
-		return cRef;
-	}
+    STDMETHODIMP_(ULONG) Release() {
+        LONG cRef = InterlockedDecrement(&_rc);
+        if (cRef == 0) {
+            delete this;
+        }
+        return cRef;
+    }
 
-	STDMETHODIMP GetParameters(DWORD*, DWORD*) {
+    STDMETHODIMP GetParameters(DWORD*, DWORD*) {
         return E_NOTIMPL;
     }
 
@@ -199,9 +199,9 @@ public:
 
     template <class Function, class... Args>
     std::future<detail::result_type<Function, Args...>> async(Function&& f, Args&&... args) {
-		static const detail::mf_init_t init_s;
+        static const detail::mf_init_t init_s;
 
-		using result_type = detail::result_type<Function, Args...>;
+        using result_type = detail::result_type<Function, Args...>;
         using packaged_type = std::packaged_task<result_type()>;
 
         auto p = new detail::async_wrapper<result_type, packaged_type>(std::bind([f](Args&&... args) {
@@ -210,8 +210,8 @@ public:
 
         auto result = p->get_future();
 
-		if (MFPutWorkItem(_q, p, nullptr) != S_OK)
-			throw std::runtime_error();
+        if (MFPutWorkItem(_q, p, nullptr) != S_OK)
+            throw std::runtime_error();
 
         return result;
     }

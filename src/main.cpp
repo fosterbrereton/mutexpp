@@ -165,6 +165,42 @@ void mutex_benchmark() {
 
 /******************************************************************************/
 
+struct map_insert_test_serial_t {
+    std::future<void> run_once(serial_queue_t& q, std::size_t) {
+        std::string key = std::to_string(std::rand());
+        std::string value = std::to_string(std::rand());
+
+        return q.async([this, key, value](){
+            map_m[key] = value;
+        });
+    }
+
+    std::map<std::string, std::string> map_m;
+};
+
+struct map_search_test_serial_t {
+    explicit map_search_test_serial_t() {
+        for (std::size_t i(0); i < 100000; ++i) {
+            std::string key = std::to_string(std::rand());
+            std::string value = std::to_string(std::rand());
+
+            map_m[key] = value;
+        }
+    }
+
+    std::future<void> run_once(serial_queue_t& q, std::size_t) {
+        std::string key = std::to_string(std::rand());
+
+        return q.async([this, key](){
+            (void)map_m.find(key);
+        });
+    }
+
+    std::map<std::string, std::string> map_m;
+};
+
+/******************************************************************************/
+
 template <typename Mutex>
 struct map_insert_test {
     using mutex_type = Mutex;
@@ -188,9 +224,7 @@ template <typename Mutex>
 struct map_search_test {
     using mutex_type = Mutex;
 
-    explicit map_search_test(std::size_t) { }
-
-    map_search_test() {
+    explicit map_search_test(std::size_t) {
         for (std::size_t i(0); i < 100000; ++i) {
             std::string key = std::to_string(std::rand());
             std::string value = std::to_string(std::rand());
@@ -274,12 +308,12 @@ void run_test_instance(std::size_t thread_count, std::ostream& out) {
         std::clock_t cpu_end = std::clock();
 
         wall_times.push_back(std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(wall_end - wall_start).count());
-        // REVISIT (fbrereto) : CLOCKS_PER_SEC is microsecond precision under
-        // macOS. I doubt it is the same everywhere.
-		{
-		using std::clock_t;
-		cpu_times.push_back(1000. * (cpu_end - cpu_start) / CLOCKS_PER_SEC);
-		}
+
+        {
+        using std::clock_t; // *shakes fist at msvc*
+        constexpr double cpms_k{CLOCKS_PER_SEC/1000.}; // clocks per millisecond
+        cpu_times.push_back((cpu_end - cpu_start) / cpms_k);
+        }
     }
 
     out << pretty_type<mutex_type>() << " wall"
@@ -289,6 +323,51 @@ void run_test_instance(std::size_t thread_count, std::ostream& out) {
 
     out << pretty_type<mutex_type>() << " cpu"
         << ","
+        << normal_analysis(cpu_times)
+        << '\n';
+}
+
+/******************************************************************************/
+
+template <typename Test>
+void run_test_instance_serial(std::ostream& out) {
+    constexpr std::size_t test_count_k{100};
+    constexpr std::size_t inner_count_k{1000};
+
+    std::vector<double> wall_times;
+    std::vector<double> cpu_times;
+    Test                test;
+    serial_queue_t      q;
+
+    for (std::size_t test_i(0); test_i < test_count_k; ++test_i) {
+        tp_t                           wall_start = mutexpp::clock_t::now();
+        std::clock_t                   cpu_start = std::clock();
+        std::vector<std::future<void>> futures(inner_count_k);
+
+        for (std::size_t inner_i(0); inner_i < inner_count_k; ++inner_i) {
+            futures[inner_i] = test.run_once(q, inner_i);
+        }
+
+        for (auto& future : futures)
+            future.get();
+
+        tp_t         wall_end = mutexpp::clock_t::now();
+        std::clock_t cpu_end = std::clock();
+
+        wall_times.push_back(std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(wall_end - wall_start).count());
+
+        {
+        using std::clock_t; // *shakes fist at msvc*
+        constexpr double cpms_k{CLOCKS_PER_SEC/1000.}; // clocks per millisecond
+        cpu_times.push_back((cpu_end - cpu_start) / cpms_k);
+        }
+    }
+
+    out << "serial wall,"
+        << normal_analysis(wall_times)
+        << '\n';
+
+    out << "serial cpu,"
         << normal_analysis(cpu_times)
         << '\n';
 }
@@ -367,21 +446,20 @@ void run_test_comprehensive(const char* name, std::ostream& out) {
 /******************************************************************************/
 
 void mutex_comprehensive() {
-    std::ofstream out("comprehensive.txt");
+    std::ofstream out("comprehensive.csv");
 
     run_test_comprehensive<map_insert_test>("map_insert_test", out);
+    run_test_instance_serial<map_insert_test_serial_t>(out);
+    run_test_instance_serial<map_search_test_serial_t>(out);
 }
 
 /******************************************************************************/
 
 void serial_queue_test() {
-    mutexpp::serial_queue_t q;
+    std::ofstream out("serial_queue.csv");
 
-	auto foo = q.sync([]() {
-		return std::string("Hello, world!");
-	});
-
-    std::cout << foo << '\n';
+    run_test_instance_serial<map_insert_test_serial_t>(out);
+    run_test_instance_serial<map_search_test_serial_t>(out);
 }
 
 /******************************************************************************/
@@ -395,6 +473,7 @@ int main(int argc, char** argv) {
     //mutex_compare();
 
     //mutex_comprehensive();
+
     serial_queue_test();
 }
 

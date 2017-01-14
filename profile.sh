@@ -2,7 +2,7 @@
 
 TOP=`dirname $0`
 
-pushd $TOP/build
+pushd $TOP/build_release
 
 xcodebuild -configuration Release -target mutexpp
 
