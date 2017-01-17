@@ -187,6 +187,7 @@ struct async_wrapper : public IMFAsyncCallback {
 
     STDMETHODIMP Invoke(IMFAsyncResult* result) {
         _p();
+        delete this;
         return S_OK;
     }
 };
