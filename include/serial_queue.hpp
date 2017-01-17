@@ -265,6 +265,35 @@ public:
 
 /******************************************************************************/
 
+namespace mutexpp {
+
+/******************************************************************************/
+
+template <typename T>
+class serial_wrapper {
+public:
+    serial_queue_t _q;
+    T              _r;
+
+public:
+    typedef T value_type;
+
+    template <typename... Args>
+    explicit serial_wrapper(Args&&... args) : _r(std::forward<Args>(args)...) {
+    }
+
+    template <typename F>
+    auto operator()(F&& f) -> decltype(_q.async(std::bind(std::forward<F>(f), std::ref(_r)))) {
+        return _q.async(std::bind(std::forward<F>(f), std::ref(_r)));
+    }
+};
+
+/******************************************************************************/
+
+} // namespace mutexpp
+
+/******************************************************************************/
+
 #endif // MUTEXPP_SERIAL_QUEUE_HPP__
 
 /******************************************************************************/
