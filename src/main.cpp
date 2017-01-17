@@ -458,8 +458,34 @@ void mutex_comprehensive() {
 void serial_queue_test() {
     std::ofstream out("serial_queue.csv");
 
+    out << "name,";
+    normal_analysis_header(out);
     run_test_instance_serial<map_insert_test_serial_t>(out);
     run_test_instance_serial<map_search_test_serial_t>(out);
+}
+
+/******************************************************************************/
+
+void serial_wrapper_test() {
+    typedef mutexpp::serial_wrapper<std::map<std::string, std::string>> serial_map_t;
+
+    serial_map_t serial_map;
+
+    serial_map([](decltype(serial_map)::value_type& map){
+        return map.emplace("hello", "world");
+    });
+
+    auto result = serial_map([](decltype(serial_map)::value_type& map){
+        return map.find("hello");
+    });
+
+    std::cerr << (result.get() != serial_map._r.end()) << '\n';
+
+    result = serial_map([](decltype(serial_map)::value_type& map){
+        return map.find("banana");
+    });
+
+    std::cerr << (result.get() != serial_map._r.end()) << '\n';
 }
 
 /******************************************************************************/
@@ -474,7 +500,9 @@ int main(int argc, char** argv) {
 
     //mutex_comprehensive();
 
-    serial_queue_test();
+    //serial_queue_test();
+
+    serial_wrapper_test();
 }
 
 /******************************************************************************/
