@@ -34,6 +34,9 @@
 
 using namespace mutexpp;
 
+using std::chrono::duration_cast;
+using std::chrono::duration;
+
 /******************************************************************************/
 
 static const std::size_t thread_exact_k = std::thread::hardware_concurrency();
@@ -309,7 +312,7 @@ void run_test_instance(std::size_t thread_count, std::ostream& out) {
         tp_t         wall_end = mutexpp::clock_t::now();
         std::clock_t cpu_end = std::clock();
 
-        wall_times.push_back(std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(wall_end - wall_start).count());
+        wall_times.push_back(duration_cast<duration<double, std::milli>>(wall_end - wall_start).count());
 
         {
         using std::clock_t; // *shakes fist at msvc*
@@ -356,7 +359,7 @@ void run_test_instance_serial(std::ostream& out) {
         tp_t         wall_end = mutexpp::clock_t::now();
         std::clock_t cpu_end = std::clock();
 
-        wall_times.push_back(std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(wall_end - wall_start).count());
+        wall_times.push_back(duration_cast<duration<double, std::milli>>(wall_end - wall_start).count());
 
         {
         using std::clock_t; // *shakes fist at msvc*
@@ -507,6 +510,9 @@ void serial_wrapper_test() {
         std::mutex               mutex;
 
         for (std::size_t i(0); i < 10000; ++i) {
+            // std::async would return a future<void> here, which blocks on
+            // destruction. As such we don't need to wrap it, other than to
+            // account for the std::async call overhead.
             lock_t lock(mutex);
             std::string key = std::to_string(i);
             map.emplace(key, key + "_value");
@@ -531,8 +537,8 @@ void serial_wrapper_test() {
 
     tp_t end = mutexpp::clock_t::now();
 
-    std::cerr << "   serial: " << std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(split - start).count() << '\n';
-    std::cerr << "nonserial: " << std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(end - split).count() << '\n';
+    std::cerr << "   serial: " << duration_cast<duration<double, std::milli>>(split - start).count() << '\n';
+    std::cerr << "nonserial: " << duration_cast<duration<double, std::milli>>(end - split).count() << '\n';
 }
 
 /******************************************************************************/
