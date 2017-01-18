@@ -309,11 +309,11 @@ class serial_queue_t {
 
     typedef std::pair<void(*)(void*), void*> pair_t;
 
-    std::thread             _executor;
+    std::mutex              _mutex;
     std::condition_variable _ready;
     std::deque<pair_t>      _queue;
-    std::mutex              _mutex;
     bool                    _done{false};
+    std::thread             _executor;
 
     void run() {
         while (true) {
