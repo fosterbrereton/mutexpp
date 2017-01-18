@@ -15,7 +15,23 @@
 
 /******************************************************************************/
 
-#if __APPLE__
+#define MUTEXPP_SERIAL_QUEUE_PORTABLE    0
+#define MUTEXPP_SERIAL_QUEUE_LIBDISPATCH 1
+#define MUTEXPP_SERIAL_QUEUE_WINMF       2
+
+#ifndef MUTEXPP_SERIAL_QUEUE_IMPL
+    #if __APPLE__
+        #define MUTEXPP_SERIAL_QUEUE_IMPL MUTEXPP_SERIAL_QUEUE_LIBDISPATCH
+    #elif _MSC_VER
+        #define MUTEXPP_SERIAL_QUEUE_IMPL MUTEXPP_SERIAL_QUEUE_WINMF
+    #else
+        #define MUTEXPP_SERIAL_QUEUE_IMPL MUTEXPP_SERIAL_QUEUE_PORTABLE
+    #endif
+#endif
+
+/******************************************************************************/
+
+#if (MUTEXPP_SERIAL_QUEUE_IMPL == MUTEXPP_SERIAL_QUEUE_LIBDISPATCH)
 
 /******************************************************************************/
 
@@ -107,7 +123,7 @@ public:
 
 /******************************************************************************/
 
-#elif _MSC_VER
+#elif (MUTEXPP_SERIAL_QUEUE_IMPL == MUTEXPP_SERIAL_QUEUE_WINMF)
 
 /******************************************************************************/
 
@@ -261,7 +277,121 @@ public:
 
 /******************************************************************************/
 
-#endif // APPLE, MSC_VER, etc.
+#elif (MUTEXPP_SERIAL_QUEUE_IMPL == MUTEXPP_SERIAL_QUEUE_PORTABLE)
+
+/******************************************************************************/
+
+#include <condition_variable>
+#include <deque>
+#include <thread>
+
+/******************************************************************************/
+
+namespace mutexpp {
+
+/******************************************************************************/
+
+namespace detail {
+
+/******************************************************************************/
+
+template <class Function, class... Args>
+using result_type = decltype(std::declval<Function>()(std::declval<Args>()...));
+
+/******************************************************************************/
+
+} // namespace detail
+
+/******************************************************************************/
+
+class serial_queue_t {
+    typedef std::unique_lock<std::mutex> lock_t;
+
+    typedef std::pair<void(*)(void*), void*> pair_t;
+
+    std::thread             _executor;
+    std::condition_variable _ready;
+    std::deque<pair_t>      _queue;
+    std::mutex              _mutex;
+    bool                    _done{false};
+
+    void run() {
+        while (true) {
+            lock_t lock(_mutex);
+
+            _ready.wait(lock, [this](){ return !_queue.empty() || _done; });
+
+            if (!_queue.empty()) {
+                pair_t pair = std::move(_queue.front());
+
+                _queue.pop_front();
+
+                lock.unlock();
+
+                pair.first(pair.second);
+            } else if (_done) {
+                break;
+            }
+        }
+    }
+
+    template <typename TaskType>
+    static void invoke(void* p) {
+        TaskType* f = static_cast<TaskType*>(p);
+        (*f)();
+        delete f;
+    }
+
+    template <typename TaskType>
+    void dispatch(TaskType* task) {
+        pair_t pair{&invoke<TaskType>, task};
+        lock_t lock(_mutex);
+
+        _queue.emplace_back(std::move(pair));
+
+        lock.unlock();
+
+        _ready.notify_one();
+    }
+
+public:
+    serial_queue_t() :
+        _executor(&serial_queue_t::run, this)
+    { }
+
+    ~serial_queue_t() {
+        lock_t lock(_mutex);
+
+        _done = true;
+        lock.unlock();
+        _ready.notify_one();
+        _executor.join();
+    }
+
+    template <class Function, class... Args>
+    std::future<detail::result_type<Function, Args...>> async(Function&& f, Args&&... args) {
+        using result_type = detail::result_type<Function, Args...>;
+        using packaged_type = std::packaged_task<result_type()>;
+
+        auto p = new packaged_type(std::bind([f](Args&&... args) {
+            return f(std::move(args)...);
+        }, std::forward<Args>(args)...));
+
+        auto result = p->get_future();
+
+        dispatch(p);
+
+        return result;
+    }
+};
+
+/******************************************************************************/
+
+} // namespace mutexpp
+
+/******************************************************************************/
+
+#endif // MUTEXPP_SERIAL_QUEUE_IMPL
 
 /******************************************************************************/
 
@@ -271,7 +401,6 @@ namespace mutexpp {
 
 template <typename T>
 class serial_wrapper {
-public:
     serial_queue_t _q;
     T              _r;
 

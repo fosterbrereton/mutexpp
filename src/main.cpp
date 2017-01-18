@@ -19,6 +19,8 @@
 #include <tbb/mutex.h>
 #include <tbb/spin_mutex.h>
 
+#define MUTEXPP_SERIAL_QUEUE_IMPL 0 // portable
+
 #define MUTEXPP_ENABLE_PROBE 0
 
 // mutexpp
@@ -469,23 +471,68 @@ void serial_queue_test() {
 void serial_wrapper_test() {
     typedef mutexpp::serial_wrapper<std::map<std::string, std::string>> serial_map_t;
 
-    serial_map_t serial_map;
+    tp_t start = mutexpp::clock_t::now();
 
-    serial_map([](decltype(serial_map)::value_type& map){
-        return map.emplace("hello", "world");
-    });
+    /* serial map test */ {
+        serial_map_t serial_map;
 
-    auto result = serial_map([](decltype(serial_map)::value_type& map){
-        return map.find("hello");
-    });
+        for (std::size_t i(0); i < 10000; ++i) {
+            serial_map([i](decltype(serial_map)::value_type& map){
+                std::string key = std::to_string(i);
+                map.emplace(key, key + "_value");
+            });
+        }
 
-    std::cerr << (result.get() != serial_map._r.end()) << '\n';
+        for (std::size_t i(0); i < 10000; ++i) {
+            auto result = serial_map([](serial_map_t::value_type& map){
+                auto iter = map.find("42");
+                return (iter == map.end()) ? "<END>" : iter->second;
+            });
+            if (result.get() != "42_value") throw std::runtime_error("unexpected not found");
 
-    result = serial_map([](decltype(serial_map)::value_type& map){
-        return map.find("banana");
-    });
+            result = serial_map([](serial_map_t::value_type& map){
+                auto iter = map.find("-1");
+                return (iter == map.end()) ? "<END>" : iter->second;
+            });
+            if (result.get() != "<END>") throw std::runtime_error("unexpected found");
+        }
+    }
 
-    std::cerr << (result.get() != serial_map._r.end()) << '\n';
+    tp_t split = mutexpp::clock_t::now();
+
+    /* non-serial map test */ {
+        typedef std::unique_lock<std::mutex> lock_t;
+
+        serial_map_t::value_type map;
+        std::mutex               mutex;
+
+        for (std::size_t i(0); i < 10000; ++i) {
+            lock_t lock(mutex);
+            std::string key = std::to_string(i);
+            map.emplace(key, key + "_value");
+        }
+
+        for (std::size_t i(0); i < 10000; ++i) {
+            auto result = std::async([&mutex, &map]() {
+                lock_t lock(mutex);
+                auto iter = map.find("42");
+                return (iter == map.end()) ? "<END>" : iter->second;
+            });
+            if (result.get() != "42_value") throw std::runtime_error("unexpected not found");
+
+            result = std::async([&mutex, &map]() {
+                lock_t lock(mutex);
+                auto iter = map.find("-1");
+                return (iter == map.end()) ? "<END>" : iter->second;
+            });
+            if (result.get() != "<END>") throw std::runtime_error("unexpected found");
+        }
+    }
+
+    tp_t end = mutexpp::clock_t::now();
+
+    std::cerr << "   serial: " << std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(split - start).count() << '\n';
+    std::cerr << "nonserial: " << std::chrono::duration_cast<std::chrono::duration<double, std::milli>>(end - split).count() << '\n';
 }
 
 /******************************************************************************/
@@ -500,7 +547,7 @@ int main(int argc, char** argv) {
 
     //mutex_comprehensive();
 
-    //serial_queue_test();
+    serial_queue_test();
 
     serial_wrapper_test();
 }
