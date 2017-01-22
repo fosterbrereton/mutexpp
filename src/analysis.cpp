@@ -8,6 +8,7 @@
 // stdc++
 #include <cmath>
 #include <iostream>
+#include <stdexcept>
 
 // application
 #include "analysis.hpp"
