@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/fosterbrereton/mutexpp.svg?branch=master)](https://travis-ci.org/fosterbrereton/mutexpp)
+
 `mutexpp` is a collection of C++ mutex implementations and utilities.
 
 # Overview
