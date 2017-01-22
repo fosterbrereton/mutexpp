@@ -5,6 +5,8 @@ include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
 conan_basic_setup()
 set(CMAKE_SKIP_RPATH OFF)
 
+set(CMAKE_CXX_FLAGS "-g -Wall -std=c++11")
+
 file(GLOB APP_SRC ./src/*.cpp)
 
 get_filename_component(APP_HEADERS_PATH ./include ABSOLUTE)
