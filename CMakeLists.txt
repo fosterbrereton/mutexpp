@@ -7,6 +7,14 @@ set(CMAKE_SKIP_RPATH OFF)
 
 set(CMAKE_CXX_FLAGS "-g -Wall -std=c++11")
 
+set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
+
+find_package(Threads)
+
+if(CMAKE_USE_PTHREADS_INIT)
+    set(CMAKE_C_FLAGS ${CMAKE_C_FLAGS} "-pthread")
+endif()
+
 file(GLOB APP_SRC ./src/*.cpp)
 
 get_filename_component(APP_HEADERS_PATH ./include ABSOLUTE)
