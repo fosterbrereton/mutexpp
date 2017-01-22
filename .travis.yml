@@ -1,0 +1,63 @@
+sudo: required
+dist: trusty
+language: cpp
+cache:
+  directories:
+    - $HOME/.conan
+matrix:
+  include:
+    - compiler: gcc
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-5
+      install:
+        - if [ "$CXX" = "g++" ]; then export CXX="g++-5" CC="gcc-5"; fi
+        - pip install conan
+        - mkdir build
+        - cd build
+        - conan install .. --build=missing
+      script:
+        - cmake .. && make
+        - cd bin # It'd be great if we could just run all the binaries we find in here...
+        - ./mutexpp
+    - compiler: clang
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+            - llvm-toolchain-precise-3.8
+          packages:
+            - clang-3.8
+      install:
+        - if [ "$CXX" = "g++" ]; then export CXX="clang++-3.8" CC="clang-3.8"; fi
+        - pip install conan
+        - mkdir build
+        - cd build
+        - conan install .. --build=missing
+      script:
+        - cmake .. && make
+        - cd bin # It'd be great if we could just run all the binaries we find in here...
+        - ./mutexpp
+    - os: osx
+      osx_image: xcode8.2
+      install:
+        - brew update
+        - brew install conan
+        # - brew outdated cmake || brew upgrade cmake
+        - if [ "$CXX" = "g++" ]; then export CXX="clang++" CC="clang"; fi
+        - ./setup_xcode.sh
+      script:
+        - cd build_debug
+        - xcodebuild
+        - cd bin # It'd be great if we could just run all the binaries we find in here...
+        - ./mutexpp
+notifications:
+  recipients:
+    secure:
+      secure: a0unQfiKSC23TgptTRMdZhFgkXjRQp3duMbFUHgWU410iT4aGFoELqTxQWYMxOlQV+0BxWudzVGo7/315sNn9ChRQG4Ikc2DrGS2wjm4HnnvNAS4D1W/1nwWXR1RNcxJBe3TR+vu+EzHLa3q7bxxZg+d/BVa66jJAW9d8Ojj9x6TjsMfRNIbYyRUEpOpP8F1RoxFGO3VGR5tjfTjLb5iaKU+ek4JSfAd1TjV60NW7C+tZzqTOVPAubdS5C+EuKRP9zH8M1hJXbkNOOHAdLedjRhP5ena593O7WjCTOaxxahmj4lAENbDgl+b/RU3AHs4Cah4DywJlJa/cEwTp/kigWQoLA+w1M563hMd97uxm+oIKEg6wIUDalDv3mYAKdPSswJb5g4Gwz8QDFWom1FTVVIbZDr2aR29CjQ4INgnAWzSirCuetH/axg2o5tzoyKlFhEG7LT/z8Xj5g8qExNMi0lg9dvIU6+dfMLHkPc1PyiaRswCgUn6F44vsqA9l5rMzfmi/0QUZFRNsUgm2k25j6Gq8+8o/a2W9Qs608K7FLkHCsWRVtdKjuA6Sq6xPCgkrMxOf/icpPyOz12I9MOzfzpC53SF1A17eoC7k3VoWb/K9f1Y3RRF9ghyqgk9USE0mGMvwlU1FXdtmFxAGVzJwFS2u0NYoFXXo1cmdiyO7z8=
+  email:
+    on_success: change
+    on_failure: always
